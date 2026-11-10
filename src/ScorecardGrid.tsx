@@ -83,7 +83,7 @@ export function ScorecardGrid({
           {players.map((player, playerIndex) => (
             <div className="scorecard-row player-scorecard-row" key={`scorecard-row-${player.id}`}>
               <span className="scorecard-row-label player-label" style={playerStyle(playerIndex)} title={displayPlayerName(player, playerIndex)}>
-                {scorecardPlayerLabel(player, playerIndex)}
+                <span className="clip">{scorecardPlayerLabel(player, playerIndex)}</span>
               </span>
               {visibleHoleNumbers.map((scorecardHoleNumber) => {
                 const cell = holeView(scorecardHoleNumber)?.cells.find((candidate) => candidate.playerId === player.id);
@@ -98,13 +98,9 @@ export function ScorecardGrid({
                     aria-label={`${displayPlayerName(player, playerIndex)} ${scorecardHoleNumber}번 홀 ${cell?.main ?? '미입력'} ${cell?.sub ?? ''}`.trim()}
                   >
                     <strong>{cell?.main ?? '—'}</strong>
-                    {parts.length ? (
-                      <span className="score-sub">
-                        {parts.map((part) => (
-                          <em key={part}>{part}</em>
-                        ))}
-                      </span>
-                    ) : null}
+                    <span className="score-sub">
+                      {parts.length ? parts.map((part) => <em key={part}>{part}</em>) : <em aria-hidden="true"> </em>}
+                    </span>
                   </button>
                 );
               })}

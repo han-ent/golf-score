@@ -17,7 +17,7 @@ import { useScorecardController } from './useScorecardController';
 import { useScorecardSession } from './useScorecardSession';
 import { useWakeLock } from './useWakeLock';
 
-const playerTones = ['#2563eb', '#db2777', '#059669', '#d97706'] as const;
+const playerTones = ['#1e3d32', '#8d7344', '#3e5c4e', '#6d5a38'] as const;
 const onGreenChoices = [1, 2, 3, 4, 5, 6] as const;
 const quickKinds = [
   ['par', '파'],
@@ -195,14 +195,14 @@ export function App() {
         {round.players.length > 1 ? (
           <div className="player-switch" role="radiogroup" aria-label="입력할 선수">
             {round.players.map((player, index) => (
-              <button key={player.id} type="button" role="radio" aria-checked={index === activeIndex} onClick={() => controller.selectPlayer(index)}>
-                {displayPlayerName(player, index)}
+              <button key={player.id} type="button" role="radio" aria-checked={index === activeIndex} onClick={() => controller.selectPlayer(index)} title={displayPlayerName(player, index)}>
+                <span className="clip">{displayPlayerName(player, index)}</span>
               </button>
             ))}
           </div>
         ) : null}
         <p className="player-line">
-          <span>{activePlayer ? displayPlayerName(activePlayer, activeIndex) : '1번'}</span>
+          <span className="clip">{activePlayer ? displayPlayerName(activePlayer, activeIndex) : '1번'}</span>
           <b>{activeCell?.main ?? '—'}</b>
         </p>
         <div className="quick-row" aria-label="한 번에 기록">
@@ -295,7 +295,7 @@ export function App() {
             const types = visibleScoreTypeCounts(review.scoreTypeCounts);
             return (
               <article className="review-player" key={review.playerId}>
-                <strong>{displayPlayerName(round.players[index] ?? { id: review.playerId, name: review.playerName }, index)}</strong>
+                <strong className="clip">{displayPlayerName(round.players[index] ?? { id: review.playerId, name: review.playerName }, index)}</strong>
                 <p className="player-line"><span>{review.completedHoles}홀</span><b>{review.completedHoles ? relativeScoreLabel(review.totalRelative) : '—'}</b></p>
                 <dl>
                   <div className="stat-line"><dt>총타</dt><dd>{review.completedHoles ? `${review.totalStrokes}타` : '—'}</dd></div>
@@ -337,7 +337,7 @@ export function App() {
                 return (
                   <li className="history-round" key={record.id}>
                     <div className="stat-line">
-                      <strong>{record.courseName.trim() || record.roundName.trim() || '라운드'}</strong>
+                      <strong className="clip">{record.courseName.trim() || record.roundName.trim() || '라운드'}</strong>
                       <b>{player ? relativeScoreLabel(player.totalRelative) : '—'}</b>
                     </div>
                     <div className="stat-line"><span>{player ? `${player.totalStrokes}타` : '—'}</span><span>파온 {player?.girRate ?? '—'}%</span></div>
