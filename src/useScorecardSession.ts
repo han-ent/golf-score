@@ -19,7 +19,7 @@ import {
   type ScorecardRound,
   type ScorecardRoundSettings,
 } from './domain/scorecard';
-import { appendScorecardHistory, createFinishedRoundRecord, loadScorecardHistory, type FinishedRoundRecord } from './domain/scorecardHistory';
+import { appendScorecardHistory, clearScorecardHistory, createFinishedRoundRecord, loadScorecardHistory, removeScorecardHistoryRecord, type FinishedRoundRecord } from './domain/scorecardHistory';
 import {
   clearScorecardRound,
   createBlankStoredScorecardRound,
@@ -47,10 +47,12 @@ export type ScorecardRoundSession = ScorecardRoundSessionState & {
   readonly updateHoleSetup: (holeNumber: number, patch: { readonly par?: number }) => void;
   readonly updateHoleScore: (holeNumber: number, playerId: string, score: ScorecardHoleScoreInput | null) => void;
   readonly updateHoleMemo: (holeNumber: number, memo: string) => void;
-  readonly updateHolePenalty: (holeNumber: number, playerId: string, kind: 'ob' | 'hazard') => void;
+  readonly updateHolePenalty: (holeNumber: number, playerId: string, kind: 'ob' | 'hazard', delta?: number) => void;
   readonly saveRound: () => boolean;
   readonly resetRound: () => void;
   readonly clearSavedRound: () => boolean;
+  readonly clearHistory: () => boolean;
+  readonly deleteHistoryRecord: (recordId: string) => boolean;
   readonly finishRound: () => boolean;
 };
 
@@ -124,8 +126,8 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     commitRound(applyHoleMemoMutation(state.round, holeNumber, memo));
   }
 
-  function updateHolePenalty(holeNumber: number, playerId: string, kind: 'ob' | 'hazard') {
-    commitRound(applyHolePenaltyMutation(state.round, holeNumber, playerId, kind));
+  function updateHolePenalty(holeNumber: number, playerId: string, kind: 'ob' | 'hazard', delta = 1) {
+    commitRound(applyHolePenaltyMutation(state.round, holeNumber, playerId, kind, delta));
   }
 
   function saveRound(): boolean {
@@ -167,6 +169,31 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     return cleared;
   }
 
+  function clearHistory(): boolean {
+    if (!storage) {
+      setState((current) => ({ ...current, history: [] }));
+      return true;
+    }
+    if (!clearScorecardHistory(storage)) {
+      return false;
+    }
+    setState((current) => ({ ...current, history: [] }));
+    return true;
+  }
+
+  function deleteHistoryRecord(recordId: string): boolean {
+    if (!storage) {
+      setState((current) => ({ ...current, history: current.history.filter((record) => record.id !== recordId) }));
+      return true;
+    }
+    const next = removeScorecardHistoryRecord(storage, recordId);
+    if (!next) {
+      return false;
+    }
+    setState((current) => ({ ...current, history: next }));
+    return true;
+  }
+
   function finishRound(): boolean {
     const record = createFinishedRoundRecord(state.round, new Date().toISOString());
     if (!record) {
@@ -205,6 +232,8 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     saveRound,
     resetRound,
     clearSavedRound,
+    clearHistory,
+    deleteHistoryRecord,
     finishRound,
   };
 }

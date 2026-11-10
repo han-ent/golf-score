@@ -115,35 +115,35 @@ describe('simple scorecard domain', () => {
       parSaveRate: 50,
       onePuttCount: 1,
       threePuttCount: 1,
-      lostStrokeHoles: [{ holeNumber: 3, label: 'OB +2' }],
-      penaltyStrokes: 2,
+      lostStrokeHoles: [{ holeNumber: 3, label: 'OB 1회' }],
+      obCount: 1,
+      hazardCount: 0,
     });
-    expect(round.holes[2]?.scores[0]?.strokes).toBe(8);
-    expect(visibleScoreTypeCounts(review!.scoreTypeCounts).map((entry) => entry.key)).toEqual(['par', 'tripleOrWorse']);
+    expect(round.holes[2]?.scores[0]?.strokes).toBe(6);
+    expect(round.holes[2]?.memo).toContain('OB 1회');
+    expect(visibleScoreTypeCounts(review!.scoreTypeCounts).map((entry) => entry.key)).toEqual(['par', 'doubleBogey']);
     expect(round.holes[0]?.scores[0]).toMatchObject({ putts: 2, puttsAssumed: false });
   });
 
-  it('adds OB +2 and hazard +1 to the stroke total and keeps the breakdown stable', () => {
-    let round = applyHolePenaltyMutation(createDefaultScorecardRound(), 1, 'player-1', 'ob');
-    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2, puttsAssumed: true });
-    expect(round.holes[0]?.scores[0]).toMatchObject({ strokes: 6, onGreenShots: 2, putts: 2, puttsAssumed: true, includedPenaltyStrokes: 2 });
+  it('keeps 온 plus putts as the total and records OB as a memo count', () => {
+    let round = applyHoleScoreMutation(createDefaultScorecardRound(), 1, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 4, putts: 2, puttsAssumed: false });
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob', 1);
+    expect(round.holes[0]?.scores[0]).toMatchObject({ strokes: 6, onGreenShots: 4, putts: 2 });
+    expect(round.holes[0]?.memo).toContain('OB 1회');
     expect(describeHoleScore(4, round.holes[0]?.scores[0], round.holes[0]?.penalties[0])).toMatchObject({
       strokes: 6,
       relativeLabel: '+2',
-      badges: ['OB +2'],
-      summary: '2온 + 2펏 + OB 2 = 6타 (파 대비 +2)',
+      badges: ['OB 1회'],
+      summary: '4온 + 2펏 = 6타 · 더블 +2 · OB 1회',
     });
-
-    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 2, putts: 4, puttsAssumed: false });
-    expect(round.holes[0]?.scores[0]?.strokes).toBe(8);
-    round = applyHolePenaltyMutation(round, 1, 'player-1', 'hazard');
-    expect(round.holes[0]?.scores[0]?.strokes).toBe(9);
-    expect(buildScorecardView(round).holes[0]?.cells[0]).toMatchObject({ main: '+5', badge: 'OB +2 · 해저드 +1' });
-
-    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob');
-    round = applyHolePenaltyMutation(round, 1, 'player-1', 'hazard');
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob', 1);
+    expect(round.holes[0]?.penalties[0]).toMatchObject({ ob: 2 });
     expect(round.holes[0]?.scores[0]?.strokes).toBe(6);
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob', -1);
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob', -1);
     expect(round.holes[0]?.penalties).toEqual([]);
+    expect(round.holes[0]?.scores[0]?.strokes).toBe(6);
+    expect(round.holes[0]?.memo).not.toContain('OB');
   });
 
   it('counts scrambling, birdie rate, par averages, and bounce back from on/putt input', () => {

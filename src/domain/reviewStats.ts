@@ -141,11 +141,18 @@ const statDefinitions: readonly StatDefinition[] = [
     explanation: '퍼트를 기록한 홀 가운데 세 번 이상 퍼트한 비율입니다.',
   },
   {
-    id: 'penaltyStrokes',
-    label: '벌타',
-    unit: 'strokes',
-    formula: 'OB 홀 × 2 + 해저드 홀 × 1',
-    explanation: '로컬 룰입니다. OB 티는 +2, 해저드 티는 +1이고 한 홀에 둘 다 있으면 더합니다. 타수에 이미 포함되어 있습니다.',
+    id: 'obCount',
+    label: 'OB 횟수',
+    unit: 'count',
+    formula: '표시한 OB 횟수의 합',
+    explanation: '타수에 더하지 않습니다. 온 타수에 이미 포함된 벌타를 홀 메모로 센 횟수입니다.',
+  },
+  {
+    id: 'hazardCount',
+    label: '해저드 횟수',
+    unit: 'count',
+    formula: '표시한 해저드 횟수의 합',
+    explanation: '타수에 더하지 않습니다. 온 타수에 이미 포함된 벌타를 홀 메모로 센 횟수입니다.',
   },
 ];
 
@@ -201,8 +208,8 @@ function displayFor(review: ScorecardPlayerReview, id: string, unit: ReviewStatU
   if (id === 'threePutt') {
     return `${review.threePuttCount}회 · ${formatStatValue(numeric, 'percent')}`;
   }
-  if (id === 'penaltyStrokes') {
-    return `${numeric}타`;
+  if (id === 'obCount' || id === 'hazardCount') {
+    return `${numeric}회`;
   }
   if (id === 'totalStrokes') {
     return `${numeric}타`;
@@ -246,8 +253,10 @@ function numericFor(review: ScorecardPlayerReview, id: string): number | null {
       return review.onePuttRate;
     case 'threePutt':
       return review.threePuttRate;
-    case 'penaltyStrokes':
-      return review.completedHoles > 0 ? review.penaltyStrokes : null;
+    case 'obCount':
+      return review.completedHoles > 0 ? review.obCount : null;
+    case 'hazardCount':
+      return review.completedHoles > 0 ? review.hazardCount : null;
     default:
       return null;
   }

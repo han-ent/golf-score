@@ -1,7 +1,40 @@
-import type { CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 
 import { scorecardPlayerLabel, type ScorecardPlayer, type ScorecardRoundView } from './domain/scorecard';
 import './scorecard.css';
+
+function useCompactScorecard(): boolean {
+  const [compact, setCompact] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 671px)');
+    const apply = () => setCompact(query.matches);
+    apply();
+    query.addEventListener('change', apply);
+    return () => query.removeEventListener('change', apply);
+  }, []);
+  return compact;
+}
+
+function abbreviatePlayer(player: ScorecardPlayer, index: number): string {
+  const name = player.name.trim();
+  if (!name) return `${index + 1}`;
+  return Array.from(name).slice(0, 2).join('');
+}
+
+function nineStrokes(roundView: ScorecardRoundView, holeNumbers: readonly number[], playerId: string): string {
+  let sum = 0;
+  let any = false;
+  for (const holeNumber of holeNumbers) {
+    const hole = roundView.holes.find((candidate) => candidate.holeNumber === holeNumber);
+    const cell = hole?.cells.find((candidate) => candidate.playerId === playerId);
+    if (!hole || !cell || cell.main === '—' || cell.main === '') continue;
+    const relative = Number(cell.main);
+    if (!Number.isFinite(relative)) continue;
+    sum += hole.par + relative;
+    any = true;
+  }
+  return any ? `${sum}` : '—';
+}
 
 type ScorecardGridProps = {
   readonly activeNine: 'front' | 'back';
@@ -26,12 +59,14 @@ export function ScorecardGrid({
   playerStyle,
   onSelectHole,
 }: ScorecardGridProps) {
+  const compact = useCompactScorecard();
   function holeView(holeNumber: number) {
     return roundView.holes.find((hole) => hole.holeNumber === holeNumber);
   }
+  const subtotalLabel = activeNine === 'front' ? 'OUT' : 'IN';
 
   return (
-    <section className="scorecard-section" aria-labelledby="scorecard-title">
+    <section className={compact ? 'scorecard-section compact' : 'scorecard-section'} aria-labelledby="scorecard-title">
       <div className="section-heading compact-heading">
         <h2 id="scorecard-title">스코어카드</h2>
         <div className="scorecard-tabs" role="tablist" aria-label="전반 후반 선택">
@@ -81,9 +116,10 @@ export function ScorecardGrid({
             ))}
           </div>
           {players.map((player, playerIndex) => (
-            <div className="scorecard-row player-scorecard-row" key={`scorecard-row-${player.id}`}>
+            <div className="scorecard-player-block" key={`scorecard-row-${player.id}`}>
+            <div className="scorecard-row player-scorecard-row">
               <span className="scorecard-row-label player-label" style={playerStyle(playerIndex)} title={displayPlayerName(player, playerIndex)}>
-                <span className="clip">{scorecardPlayerLabel(player, playerIndex)}</span>
+                <span className="clip">{compact ? abbreviatePlayer(player, playerIndex) : scorecardPlayerLabel(player, playerIndex)}</span>
               </span>
               {visibleHoleNumbers.map((scorecardHoleNumber) => {
                 const cell = holeView(scorecardHoleNumber)?.cells.find((candidate) => candidate.playerId === player.id);
@@ -106,6 +142,8 @@ export function ScorecardGrid({
                   </button>
                 );
               })}
+            </div>
+            <p className="scorecard-subtotal">{compact ? abbreviatePlayer(player, playerIndex) : scorecardPlayerLabel(player, playerIndex)} {subtotalLabel} {nineStrokes(roundView, visibleHoleNumbers, player.id)}</p>
             </div>
           ))}
         </div>

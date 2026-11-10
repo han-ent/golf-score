@@ -402,6 +402,43 @@ h1, h2, h3, p { margin: 0; }
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
 }
+button.history-round {
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 550;
+  text-align: left;
+  white-space: normal;
+}
+.history-when,
+.history-meta,
+.history-hole p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.history-viewer-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+.history-viewer-bar .text-button { width: auto; }
+.history-totals,
+.history-hole {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.history-hole {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
 .review-player strong,
 .history-round strong { min-width: 0; }
 button.stat-line {
@@ -431,17 +468,17 @@ button.stat-line {
 .score-readout { display: grid; gap: var(--space-2); }
 .penalty-badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .penalty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   max-width: 100%;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   border-radius: 999px;
   background: var(--brass);
   color: var(--ivory);
   font-size: 13px;
   font-weight: 700;
   line-height: 24px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .stat-tip,
 .score-breakdown,
@@ -520,7 +557,12 @@ button.stat-line {
 }
 .primary-button,
 .sheet-actions .primary-button,
-.confirm-actions .primary-button { background: var(--green); border-color: var(--green); color: var(--ivory); }
+.confirm-actions .primary-button,
+.confirm-actions .danger-button,
+.sheet-actions .danger-button { background: var(--green); border-color: var(--green); color: var(--ivory); }
+.confirm-actions .danger-button,
+.sheet-actions .danger-button { background: var(--danger); border-color: var(--danger); color: var(--ivory); }
+.sheet-actions .danger-button { grid-column: 1 / -1; }
 .secondary-button,
 .hole-nav button,
 .sheet-actions button,

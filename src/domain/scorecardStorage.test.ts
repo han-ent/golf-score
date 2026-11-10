@@ -91,7 +91,7 @@ describe('scorecard local storage', () => {
     expect(loaded?.holes).toHaveLength(18);
   });
 
-  it('migrates a legacy OB mark into +2 once and does not add it again on reload', () => {
+  it('keeps legacy OB as a memo count and reverses a saved double-counted total', () => {
     const legacy = {
       version: 1,
       round: {
@@ -114,12 +114,24 @@ describe('scorecard local storage', () => {
 
     const loaded = deserializeScorecardRound(JSON.stringify(legacy));
     expect(loaded?.players[0]?.name).toBe('영석');
-    expect(loaded?.holes[0]?.scores[0]).toMatchObject({ strokes: 6, onGreenShots: 2, putts: 2, puttsAssumed: true, includedPenaltyStrokes: 2 });
-    expect(buildScorecardView(loaded!).holes[0]?.cells[0]).toMatchObject({ main: '+2', sub: '온 2 · 펏 2', badge: 'OB +2' });
+    expect(loaded?.holes[0]?.scores[0]).toMatchObject({ strokes: 4, onGreenShots: 2, putts: 2, puttsAssumed: true });
+    expect(loaded?.holes[0]?.penalties[0]).toMatchObject({ ob: 1, hazard: 0 });
+    expect(loaded?.holes[0]?.memo).toContain('OB 1회');
+    expect(buildScorecardView(loaded!).holes[0]?.cells[0]).toMatchObject({ main: '0', sub: '온 2 · 펏 2', badge: 'OB 1회' });
 
-    const reloaded = deserializeScorecardRound(serializeScorecardRound(loaded!));
-    expect(reloaded?.holes[0]?.scores[0]?.strokes).toBe(6);
-    expect(reloaded?.holes[0]?.scores[0]?.includedPenaltyStrokes).toBe(2);
+    const doubled = deserializeScorecardRound(JSON.stringify({
+      version: 1,
+      round: {
+        ...legacy.round,
+        holes: [{
+          ...legacy.round.holes[0],
+          scores: [{ playerId: 'player-1', strokes: 6, entryMode: 'on-putt', onGreenShots: 2, putts: 2, includedPenaltyStrokes: 2 }],
+        }],
+      },
+    }));
+    expect(doubled?.holes[0]?.scores[0]?.strokes).toBe(4);
+    const reloaded = deserializeScorecardRound(serializeScorecardRound(doubled!));
+    expect(reloaded?.holes[0]?.scores[0]?.strokes).toBe(4);
   });
 
   it('rejects invalid or mismatched versions', () => {

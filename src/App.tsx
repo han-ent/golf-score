@@ -1,6 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
+import { HistoryRoundSheet } from './HistoryRoundSheet';
 import { RoundSetupSheet } from './RoundSetupSheet';
 import { ScorecardGrid } from './ScorecardGrid';
 import { StatList } from './StatList';
@@ -12,7 +13,7 @@ import {
   visibleScoreTypeCounts,
   type QuickScoreKind,
 } from './domain/scorecard';
-import { compareStats, comparisonHeadline, comparisonNote, firstPlayerPeers, historyPeers, statValueFromHistory, summarizeScorecardHistory, type FinishedRoundPlayer } from './domain/scorecardHistory';
+import { compareStats, comparisonHeadline, comparisonNote, firstPlayerPeers, formatFinishedRoundWhen, historyPeers, statValueFromHistory, summarizeScorecardHistory, type FinishedRoundPlayer } from './domain/scorecardHistory';
 import { formatStatValue, reviewStatDefinition, reviewStatIds, reviewStatsFor } from './domain/reviewStats';
 import { isRoundSetupDraftDirty, roundEditorFromDraft, roundSetupDraftFromRound, type RoundSetupDraft } from './roundSetup';
 import { useFieldPreferences } from './preferences';
@@ -32,7 +33,7 @@ const quickKinds = [
 ] as const;
 
 type ExportPreview = { readonly source: string; readonly fileName: string; readonly blob: Blob };
-type ConfirmKind = 'reset' | 'clear' | 'finish' | 'discard-setup';
+type ConfirmKind = 'reset' | 'clear' | 'finish' | 'discard-setup' | 'clear-history' | 'delete-history';
 
 export function App() {
   const session = useScorecardSession();
@@ -46,7 +47,9 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoState, setMemoState] = useState<{ readonly hole: number; readonly open: boolean }>({ hole: 1, open: false });
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
-  useViewportSheet(settingsOpen || confirmKind !== null);
+  const [viewedHistoryId, setViewedHistoryId] = useState<string | null>(null);
+  const [pendingHistoryId, setPendingHistoryId] = useState<string | null>(null);
+  useViewportSheet(settingsOpen || confirmKind !== null || viewedHistoryId !== null);
   const controller = useScorecardController({ round, session });
   const memoOpen = memoState.hole === controller.holeNumber && memoState.open;
   const activePlayer = controller.activePlayer ?? round.players[0];
@@ -168,15 +171,41 @@ export function App() {
       setSettingsOpen(false);
       setSetupDraft(null);
     }
+    if (confirmKind === 'clear-history') {
+      session.clearHistory();
+      setViewedHistoryId(null);
+    }
+    if (confirmKind === 'delete-history' && pendingHistoryId) {
+      session.deleteHistoryRecord(pendingHistoryId);
+      if (viewedHistoryId === pendingHistoryId) {
+        setViewedHistoryId(null);
+      }
+    }
+    setPendingHistoryId(null);
     setConfirmKind(null);
   }
 
-  const confirmCopy: Record<ConfirmKind, { title: string; body: string; confirm: string }> = {
+  const pendingHistory = session.history.find((record) => record.id === pendingHistoryId);
+  const pendingHistoryName = pendingHistory?.courseName.trim() || pendingHistory?.roundName.trim() || '이 라운드';
+  const confirmCopy: Record<ConfirmKind, { title: string; body: string; confirm: string; danger?: boolean }> = {
     reset: { title: '새 라운드', body: '지금 라운드의 점수와 메모를 비울까요?', confirm: '비우고 시작' },
-    clear: { title: '저장 기록 지우기', body: '이 기기에 저장된 현재 라운드를 지울까요? 지난 라운드 기록은 남습니다.', confirm: '지우기' },
+    clear: { title: '지금 라운드 지우기', body: '지금 치고 있는 라운드의 점수와 메모를 지웁니다. 지난 라운드 기록과 평균은 남습니다.', confirm: '지우기' },
     finish: { title: '라운드 마치기', body: '이 라운드를 지난 기록에 남기고 새 라운드를 시작할까요?', confirm: '기록하고 시작' },
     'discard-setup': { title: '저장하지 않고 닫기', body: '라운드 설정의 변경 내용을 버릴까요?', confirm: '버리고 닫기' },
+    'clear-history': {
+      title: '지난 기록 전부 삭제',
+      body: `저장된 지난 라운드 ${session.history.length}개가 이 기기에서 완전히 지워집니다. 되돌릴 수 없습니다. 지금 치고 있는 라운드는 그대로 남습니다.`,
+      confirm: '전부 삭제',
+      danger: true,
+    },
+    'delete-history': {
+      title: '이 지난 기록 삭제',
+      body: `${pendingHistoryName} 기록이 지난 라운드에서 지워집니다. 되돌릴 수 없습니다. 지금 치고 있는 라운드는 그대로 남습니다.`,
+      confirm: '삭제',
+      danger: true,
+    },
   };
+  const viewedHistory = session.history.find((record) => record.id === viewedHistoryId) ?? null;
 
   return (
     <main className="app-shell">
@@ -266,24 +295,35 @@ export function App() {
             </div>
             {currentScore?.entryMode === 'on-putt' && currentScore.puttsAssumed === true ? <p className="assumed-note">기본 2펏입니다. 1–4를 누르면 굵게 바뀝니다.</p> : null}
             <div className="penalty-row">
-              <button type="button" aria-pressed={penalty?.ob === true} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'ob')}>OB +2</button>
-              <button type="button" aria-pressed={penalty?.hazard === true} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'hazard')}>해저드 +1</button>
+              <button type="button" aria-pressed={(penalty?.ob ?? 0) > 0} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'ob', 1)}>OB</button>
+              <button type="button" aria-pressed={(penalty?.hazard ?? 0) > 0} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'hazard', 1)}>해저드</button>
               <button type="button" onClick={() => controller.updateHoleInOne(activePlayer.id)}>홀인원</button>
               <button type="button" className="danger" onClick={() => controller.clearPlayerScore(activePlayer.id)}>지우기</button>
             </div>
-            <p className="hint">OB 티는 +2, 해저드 티는 +1입니다. 파·보기·더블 뒤에도 이 홀 타수에 남습니다.</p>
+            <p className="hint">OB·해저드는 타수에 더하지 않습니다. 누르면 이 홀 메모에 횟수가 늘고, 배지의 − 로 줄입니다.</p>
             {breakdown.badges.length || breakdown.summary ? (
               <div className="score-readout">
                 {breakdown.badges.length ? (
                   <div className="penalty-badges">
-                    {breakdown.badges.map((badge) => <span className="penalty-badge" key={badge}>{badge}</span>)}
+                    {breakdown.badges.map((badge) => (
+                      <span className="penalty-badge" key={badge}>
+                        {badge}
+                        <button
+                          type="button"
+                          aria-label={`${badge} 한 번 줄이기`}
+                          onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, badge.startsWith('OB') ? 'ob' : 'hazard', -1)}
+                        >
+                          −
+                        </button>
+                      </span>
+                    ))}
                   </div>
                 ) : null}
                 {breakdown.summary ? <p className="score-breakdown">{breakdown.summary}</p> : null}
               </div>
             ) : null}
             <label className="manual-score">
-              직접 타수 (벌타 제외)
+              직접 타수
               <input
                 inputMode="numeric"
                 value={manualScoreDrafts[manualDraftKey(activePlayer.id)] ?? ''}
@@ -377,24 +417,27 @@ export function App() {
               label="지난 라운드 평균"
               rows={reviewStatIdsWithSamples(historyPeersForCard)}
             />
+            <p className="history-meta">항목을 누르면 그 라운드 스코어카드를 봅니다. 지금 라운드는 바뀌지 않습니다.</p>
             <ol>
-              {[...session.history].reverse().map((record) => {
-                const player = record.players[0];
-                return (
-                  <li className="history-round" key={record.id}>
-                    <div className="stat-line">
-                      <strong className="clip">{record.courseName.trim() || record.roundName.trim() || '라운드'}</strong>
-                      <b>{player ? relativeScoreLabel(player.totalRelative) : '—'}</b>
-                    </div>
-                    <div className="stat-line"><span>{player ? `${player.totalStrokes}타` : '—'}</span><span>파온 {player?.girRate ?? '—'}%</span></div>
-                    <div className="trend-track" aria-hidden="true"><span style={{ width: `${Math.max(0, Math.min(100, player?.girRate ?? 0))}%` }} /></div>
-                  </li>
-                );
-              })}
+              {[...session.history].reverse().map((record) => (
+                <li key={record.id}>
+                  <button className="history-round" type="button" onClick={() => setViewedHistoryId(record.id)}>
+                    <span className="history-when">{formatFinishedRoundWhen(record.finishedAt)}</span>
+                    <strong className="clip">{record.courseName.trim() || record.roundName.trim() || '라운드'}</strong>
+                    {record.players.map((player) => (
+                      <span className="stat-line" key={player.playerId}>
+                        <span className="clip">{player.playerName || '플레이어'}</span>
+                        <b>{player.totalStrokes}타 {relativeScoreLabel(player.totalRelative)}</b>
+                      </span>
+                    ))}
+                  </button>
+                </li>
+              ))}
             </ol>
           </>
         ) : <p>마친 라운드가 없습니다.</p>}
         <button className="secondary-button" type="button" disabled={!hasScores} onClick={() => setConfirmKind('finish')}>이 라운드 마치기</button>
+        <button className="secondary-button" type="button" disabled={session.history.length === 0} onClick={() => setConfirmKind('clear-history')}>지난 기록 전부 삭제</button>
       </section>
 
       <section className="export-card" aria-labelledby="export-title">
@@ -402,7 +445,7 @@ export function App() {
         <p>전체 스코어카드, 라운드 리뷰, 홀 메모를 사진 한 장으로 만들어 카카오톡 등으로 내보냅니다.</p>
         <div className="export-actions">
           <button className="primary-button" type="button" onClick={handleExportPng}>스코어카드 내보내기</button>
-          <button className="secondary-button" type="button" onClick={() => setConfirmKind('clear')}>저장 기록 지우기</button>
+          <button className="secondary-button" type="button" onClick={() => setConfirmKind('clear')}>지금 라운드 지우기</button>
         </div>
         {exportStatus ? <p className="status-text">{exportStatus}</p> : null}
         {exportPreview ? (
@@ -416,6 +459,17 @@ export function App() {
           </div>
         ) : null}
       </section>
+
+      {viewedHistory ? (
+        <HistoryRoundSheet
+          record={viewedHistory}
+          onClose={() => setViewedHistoryId(null)}
+          onDelete={() => {
+            setPendingHistoryId(viewedHistory.id);
+            setConfirmKind('delete-history');
+          }}
+        />
+      ) : null}
 
       {settingsOpen && setupDraft ? (
         <RoundSetupSheet
@@ -435,7 +489,7 @@ export function App() {
             <p>{confirmCopy[confirmKind].body}</p>
             <div className="confirm-actions">
               <button className="secondary-button" type="button" onClick={() => setConfirmKind(null)}>취소</button>
-              <button className="primary-button" type="button" onClick={runConfirm}>{confirmCopy[confirmKind].confirm}</button>
+              <button className={confirmCopy[confirmKind].danger ? 'danger-button' : 'primary-button'} type="button" onClick={runConfirm}>{confirmCopy[confirmKind].confirm}</button>
             </div>
           </div>
         </div>,
@@ -456,7 +510,7 @@ function reviewStatIdsWithSamples(peers: readonly FinishedRoundPlayer[]) {
       return [];
     }
     const average = Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
-    const display = id === 'totalStrokes' || id === 'penaltyStrokes' ? `${formatStatValue(average, definition.unit)}타` : formatStatValue(average, definition.unit);
+    const display = id === 'totalStrokes' ? `${formatStatValue(average, definition.unit)}타` : id === 'obCount' || id === 'hazardCount' ? `${formatStatValue(average, definition.unit)}회` : formatStatValue(average, definition.unit);
     return [{
       id,
       label: definition.label,
