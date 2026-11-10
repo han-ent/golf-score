@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { createDefaultScorecardRound } from './scorecard';
+import { buildScorecardView, createDefaultScorecardRound } from './scorecard';
 import {
   clearScorecardRound,
   deserializeScorecardRound,
@@ -89,6 +89,37 @@ describe('scorecard local storage', () => {
     expect(loaded?.holes[0]).toMatchObject({ memo: '예전 메모', penalties: [] });
     expect(loaded?.holes[0]?.scores[0]).toMatchObject({ onGreenShots: 3, putts: 2, puttsAssumed: false, strokes: 5 });
     expect(loaded?.holes).toHaveLength(18);
+  });
+
+  it('migrates a legacy OB mark into +2 once and does not add it again on reload', () => {
+    const legacy = {
+      version: 1,
+      round: {
+        id: 'legacy-ob',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+        roundName: '예전',
+        courseName: '동코스',
+        players: [{ id: 'player-1', name: '영석' }],
+        settings: { holeCount: 18 },
+        holes: [{
+          holeNumber: 1,
+          par: 4,
+          memo: '',
+          scores: [{ playerId: 'player-1', strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2, puttsAssumed: true }],
+          penalties: [{ playerId: 'player-1', ob: true, hazard: false }],
+        }],
+      },
+    };
+
+    const loaded = deserializeScorecardRound(JSON.stringify(legacy));
+    expect(loaded?.players[0]?.name).toBe('영석');
+    expect(loaded?.holes[0]?.scores[0]).toMatchObject({ strokes: 6, onGreenShots: 2, putts: 2, puttsAssumed: true, includedPenaltyStrokes: 2 });
+    expect(buildScorecardView(loaded!).holes[0]?.cells[0]).toMatchObject({ main: '+2', sub: '온 2 · 펏 2', badge: 'OB +2' });
+
+    const reloaded = deserializeScorecardRound(serializeScorecardRound(loaded!));
+    expect(reloaded?.holes[0]?.scores[0]?.strokes).toBe(6);
+    expect(reloaded?.holes[0]?.scores[0]?.includedPenaltyStrokes).toBe(2);
   });
 
   it('rejects invalid or mismatched versions', () => {

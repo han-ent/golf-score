@@ -89,13 +89,15 @@ export function ScorecardGrid({
                 const cell = holeView(scorecardHoleNumber)?.cells.find((candidate) => candidate.playerId === player.id);
                 const parts = (cell?.sub ?? '').split(' · ').filter(Boolean);
 
+                const penaltyClass = cell?.badge ? ' has-penalty' : '';
+                const activeClass = scorecardHoleNumber === selectedHoleNumber ? ' active' : '';
                 return (
                   <button
-                    className={scorecardHoleNumber === selectedHoleNumber ? 'scorecard-cell score-cell active' : 'scorecard-cell score-cell'}
+                    className={`scorecard-cell score-cell${activeClass}${penaltyClass}`}
                     key={`${player.id}-${scorecardHoleNumber}`}
                     type="button"
                     onClick={() => onSelectHole(scorecardHoleNumber)}
-                    aria-label={`${displayPlayerName(player, playerIndex)} ${scorecardHoleNumber}번 홀 ${cell?.main ?? '미입력'} ${cell?.sub ?? ''}`.trim()}
+                    aria-label={`${displayPlayerName(player, playerIndex)} ${scorecardHoleNumber}번 홀 ${cell?.main ?? '미입력'} ${cell?.sub ?? ''} ${cell?.badge ?? ''}`.trim()}
                   >
                     <strong>{cell?.main ?? '—'}</strong>
                     <span className="score-sub">

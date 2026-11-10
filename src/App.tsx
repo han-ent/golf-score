@@ -1,16 +1,19 @@
 import { useState, type CSSProperties } from 'react';
 
+import { RoundSetupSheet } from './RoundSetupSheet';
 import { ScorecardGrid } from './ScorecardGrid';
+import { StatList } from './StatList';
 import {
+  describeHoleScore,
   displayPlayerName,
   quickScoreForPar,
   relativeScoreLabel,
-  scorecardPlayerCountOptions,
   visibleScoreTypeCounts,
   type QuickScoreKind,
 } from './domain/scorecard';
-import { summarizeScorecardHistory } from './domain/scorecardHistory';
-import { parseEditableIntegerDraft } from './inputDrafts';
+import { compareStats, comparisonHeadline, comparisonNote, firstPlayerPeers, historyPeers, statValueFromHistory, summarizeScorecardHistory, type FinishedRoundPlayer } from './domain/scorecardHistory';
+import { formatStatValue, reviewStatDefinition, reviewStatIds, reviewStatsFor } from './domain/reviewStats';
+import { isRoundSetupDraftDirty, roundEditorFromDraft, roundSetupDraftFromRound, type RoundSetupDraft } from './roundSetup';
 import { useFieldPreferences } from './preferences';
 import { createScorecardExportPngBlob, createScorecardExportSvg, downloadScorecardExportPng, scorecardExportFileName, shareScorecardExportPng } from './scorecardExport';
 import { useScorecardController } from './useScorecardController';
@@ -19,6 +22,7 @@ import { useWakeLock } from './useWakeLock';
 
 const playerTones = ['#1e3d32', '#8d7344', '#3e5c4e', '#6d5a38'] as const;
 const onGreenChoices = [1, 2, 3, 4, 5, 6] as const;
+const puttChoices = [1, 2, 3, 4] as const;
 const quickKinds = [
   ['par', '파'],
   ['bogey', '보기'],
@@ -26,15 +30,15 @@ const quickKinds = [
 ] as const;
 
 type ExportPreview = { readonly source: string; readonly fileName: string; readonly blob: Blob };
-type ConfirmKind = 'reset' | 'clear' | 'finish';
+type ConfirmKind = 'reset' | 'clear' | 'finish' | 'discard-setup';
 
 export function App() {
   const session = useScorecardSession();
   const { round } = session;
   const preferences = useFieldPreferences();
   const wakeLock = useWakeLock(preferences.wakeLock);
-  const [holeCountDraft, setHoleCountDraft] = useState(() => round.settings.holeCount.toString());
   const [manualScoreDrafts, setManualScoreDrafts] = useState<Record<string, string>>({});
+  const [setupDraft, setSetupDraft] = useState<RoundSetupDraft | null>(null);
   const [exportStatus, setExportStatus] = useState<string | null>(null);
   const [exportPreview, setExportPreview] = useState<ExportPreview | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -51,33 +55,38 @@ export function App() {
   const puttValue = currentScore && typeof currentScore.putts === 'number' ? currentScore.putts : 2;
   const puttsAssumed = currentScore?.entryMode === 'hio' ? false : currentScore?.entryMode !== 'on-putt' || currentScore.puttsAssumed === true;
   const par = controller.parForHole(controller.holeNumber);
-  const penalty = selectedHole ? round.holes.find((hole) => hole.holeNumber === controller.holeNumber)?.penalties.find((mark) => mark.playerId === activePlayer?.id) : undefined;
+  const penalty = round.holes.find((hole) => hole.holeNumber === controller.holeNumber)?.penalties.find((mark) => mark.playerId === activePlayer?.id);
+  const breakdown = describeHoleScore(par, currentScore, penalty);
   const historySummary = summarizeScorecardHistory(session.history);
+  const historyPeersForCard = firstPlayerPeers(session.history);
   const hasScores = round.holes.some((hole) => hole.scores.length > 0);
-  const quickHint = `파 ${par} 기준. 파 ${quickScoreForPar(par, 'par').onGreenShots}온 2펏, 보기 ${quickScoreForPar(par, 'bogey').onGreenShots}온 2펏, 더블 ${quickScoreForPar(par, 'double').onGreenShots}온 2펏.`;
+  const quickHint = `파 ${par}: 파 ${quickScoreForPar(par, 'par').onGreenShots}온 2펏 · 보기 ${quickScoreForPar(par, 'bogey').onGreenShots}온 2펏 · 더블 ${quickScoreForPar(par, 'double').onGreenShots}온 2펏. 퍼트는 1–4.`;
 
   function playerStyle(index: number): CSSProperties {
     return preferences.sunlight ? ({ '--player-tone': '#000000' } as CSSProperties) : ({ '--player-tone': playerTones[index % playerTones.length] } as CSSProperties);
   }
 
-  function updateHoleCountDraft(value: string) {
-    const parsedValue = parseEditableIntegerDraft(value);
-    if (parsedValue !== null) {
-      const normalizedHoleCount = clampInteger(parsedValue, 1, 18);
-      setHoleCountDraft(normalizedHoleCount.toString());
-      session.updateRoundSetup({ holeCount: normalizedHoleCount });
-      return;
-    }
-    setHoleCountDraft(value);
+  function openSettings() {
+    setSetupDraft(roundSetupDraftFromRound(round));
+    setSettingsOpen(true);
   }
 
-  function normalizeHoleCountDraft() {
-    const parsedValue = parseEditableIntegerDraft(holeCountDraft);
-    const normalizedHoleCount = parsedValue === null ? round.settings.holeCount : clampInteger(parsedValue, 1, 18);
-    setHoleCountDraft(normalizedHoleCount.toString());
-    if (normalizedHoleCount !== round.settings.holeCount) {
-      session.updateRoundSetup({ holeCount: normalizedHoleCount });
+  function requestCloseSettings() {
+    if (setupDraft && isRoundSetupDraftDirty(setupDraft, round)) {
+      setConfirmKind('discard-setup');
+      return;
     }
+    setSettingsOpen(false);
+    setSetupDraft(null);
+  }
+
+  function saveSetup() {
+    if (!setupDraft || !isRoundSetupDraftDirty(setupDraft, round)) {
+      return;
+    }
+    session.applyRoundEditor(roundEditorFromDraft(setupDraft, round.settings.holeCount));
+    setSettingsOpen(false);
+    setSetupDraft(null);
   }
 
   function manualDraftKey(playerId: string) {
@@ -131,7 +140,6 @@ export function App() {
 
   function runConfirm() {
     if (confirmKind === 'reset') {
-      setHoleCountDraft('18');
       setManualScoreDrafts({});
       setExportStatus(null);
       setExportPreview(null);
@@ -140,7 +148,6 @@ export function App() {
       setSettingsOpen(false);
     }
     if (confirmKind === 'clear') {
-      setHoleCountDraft('18');
       setManualScoreDrafts({});
       setExportStatus(null);
       setExportPreview(null);
@@ -150,10 +157,13 @@ export function App() {
     if (confirmKind === 'finish') {
       const finished = session.finishRound();
       if (finished) {
-        setHoleCountDraft('18');
         setManualScoreDrafts({});
         controller.resetScorecardDrafts();
       }
+    }
+    if (confirmKind === 'discard-setup') {
+      setSettingsOpen(false);
+      setSetupDraft(null);
     }
     setConfirmKind(null);
   }
@@ -162,6 +172,7 @@ export function App() {
     reset: { title: '새 라운드', body: '지금 라운드의 점수와 메모를 비울까요?', confirm: '비우고 시작' },
     clear: { title: '저장 기록 지우기', body: '이 기기에 저장된 현재 라운드를 지울까요? 지난 라운드 기록은 남습니다.', confirm: '지우기' },
     finish: { title: '라운드 마치기', body: '이 라운드를 지난 기록에 남기고 새 라운드를 시작할까요?', confirm: '기록하고 시작' },
+    'discard-setup': { title: '저장하지 않고 닫기', body: '라운드 설정의 변경 내용을 버릴까요?', confirm: '버리고 닫기' },
   };
 
   return (
@@ -174,14 +185,18 @@ export function App() {
         <div className="app-bar-actions">
           <button className="text-button" type="button" aria-pressed={preferences.sunlight} onClick={() => preferences.setSunlight(!preferences.sunlight)}>햇빛</button>
           <button className="text-button" type="button" aria-pressed={preferences.wakeLock} onClick={() => preferences.setWakeLock(!preferences.wakeLock)}>화면 유지</button>
-          <button className="text-button" type="button" onClick={() => setSettingsOpen(true)}>설정</button>
+          <button className="text-button" type="button" onClick={openSettings}>설정</button>
         </div>
       </header>
       {wakeLock.message ? <p className="notice">{wakeLock.message}</p> : null}
 
+      <div className="hole-nav" aria-label="홀 이동">
+        <button type="button" onClick={controller.previousHole} disabled={controller.holeNumber <= 1}>이전 홀</button>
+        <button type="button" onClick={controller.advanceHole} disabled={controller.holeNumber >= round.settings.holeCount}>다음 홀</button>
+      </div>
+
       <section className="hole-entry" aria-labelledby="hole-input-title">
         <div className="title-row">
-          <button className="text-button" type="button" onClick={controller.previousHole}>이전 홀</button>
           <h1 id="hole-input-title">{controller.holeNumber}번 홀</h1>
           <strong className="running-total">{activeReview?.completedHoles ? relativeScoreLabel(activeReview.totalRelative) : '—'}</strong>
         </div>
@@ -229,11 +244,13 @@ export function App() {
               ))}
             </div>
             <p className="detail-label">펏</p>
-            <div className="putt-line">
+            <div className="putt-stepper">
               <button className="text-button" type="button" onClick={() => controller.adjustPutts(activePlayer.id, -1)} aria-label="퍼트 줄이기">−</button>
               <strong className={puttsAssumed ? 'putt-value assumed' : 'putt-value'}>{puttValue}</strong>
               <button className="text-button" type="button" onClick={() => controller.adjustPutts(activePlayer.id, 1)} aria-label="퍼트 늘리기">+</button>
-              {[1, 2, 3].map((choice) => {
+            </div>
+            <div className="choice-row putt-choices" role="group" aria-label="퍼트 1에서 4">
+              {puttChoices.map((choice) => {
                 const pressed = currentScore?.entryMode === 'on-putt' && currentScore.putts === choice && currentScore.puttsAssumed !== true;
                 const assumedChip = !pressed && choice === puttValue && puttsAssumed;
                 const chipClass = pressed ? 'choice-chip active' : assumedChip ? 'choice-chip assumed' : 'choice-chip';
@@ -244,15 +261,26 @@ export function App() {
                 );
               })}
             </div>
-            {currentScore?.entryMode === 'on-putt' && currentScore.puttsAssumed === true ? <p className="assumed-note">기본 2펏입니다. 1펏이나 3펏을 누르면 굵게 바뀝니다.</p> : null}
+            {currentScore?.entryMode === 'on-putt' && currentScore.puttsAssumed === true ? <p className="assumed-note">기본 2펏입니다. 1–4를 누르면 굵게 바뀝니다.</p> : null}
             <div className="penalty-row">
-              <button type="button" aria-pressed={penalty?.ob === true} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'ob')}>OB</button>
-              <button type="button" aria-pressed={penalty?.hazard === true} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'hazard')}>해저드</button>
+              <button type="button" aria-pressed={penalty?.ob === true} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'ob')}>OB +2</button>
+              <button type="button" aria-pressed={penalty?.hazard === true} onClick={() => session.updateHolePenalty(controller.holeNumber, activePlayer.id, 'hazard')}>해저드 +1</button>
               <button type="button" onClick={() => controller.updateHoleInOne(activePlayer.id)}>홀인원</button>
               <button type="button" className="danger" onClick={() => controller.clearPlayerScore(activePlayer.id)}>지우기</button>
             </div>
+            <p className="hint">OB 티는 +2, 해저드 티는 +1입니다. 파·보기·더블 뒤에도 이 홀 타수에 남습니다.</p>
+            {breakdown.badges.length || breakdown.summary ? (
+              <div className="score-readout">
+                {breakdown.badges.length ? (
+                  <div className="penalty-badges">
+                    {breakdown.badges.map((badge) => <span className="penalty-badge" key={badge}>{badge}</span>)}
+                  </div>
+                ) : null}
+                {breakdown.summary ? <p className="score-breakdown">{breakdown.summary}</p> : null}
+              </div>
+            ) : null}
             <label className="manual-score">
-              직접 타수
+              직접 타수 (벌타 제외)
               <input
                 inputMode="numeric"
                 value={manualScoreDrafts[manualDraftKey(activePlayer.id)] ?? ''}
@@ -290,23 +318,33 @@ export function App() {
 
       <section className="review-card" aria-labelledby="review-title">
         <h2 id="review-title">라운드 리뷰</h2>
+        <p className="hint">항목을 누르거나 가리키면 계산과 지난 라운드 평균을 보여 줍니다.</p>
         <div className="review-grid">
           {controller.roundView.reviews.map((review, index) => {
             const types = visibleScoreTypeCounts(review.scoreTypeCounts);
+            const player = round.players[index] ?? { id: review.playerId, name: review.playerName };
+            const playerLabel = displayPlayerName(player, index);
+            const stats = reviewStatsFor(review);
+            const peers = historyPeers(session.history, playerLabel, index);
+            const comparisons = compareStats(stats, peers);
+            const headline = comparisonHeadline(comparisons);
             return (
               <article className="review-player" key={review.playerId}>
-                <strong className="clip">{displayPlayerName(round.players[index] ?? { id: review.playerId, name: review.playerName }, index)}</strong>
+                <strong className="clip">{playerLabel}</strong>
                 <p className="player-line"><span>{review.completedHoles}홀</span><b>{review.completedHoles ? relativeScoreLabel(review.totalRelative) : '—'}</b></p>
-                <dl>
-                  <div className="stat-line"><dt>총타</dt><dd>{review.completedHoles ? `${review.totalStrokes}타` : '—'}</dd></div>
-                  <div className="stat-line"><dt>전반/후반</dt><dd>{relativeScoreLabel(review.frontRelative)} / {relativeScoreLabel(review.backRelative)}</dd></div>
-                  <div className="stat-line"><dt>온 평균</dt><dd>{review.averageOnGreenShots ?? '—'}</dd></div>
-                  <div className="stat-line"><dt>펏 평균</dt><dd>{review.averagePutts ?? '—'}</dd></div>
-                  <div className="stat-line"><dt>파온율</dt><dd>{review.girRate === null ? '—' : `${review.girRate}%`}</dd></div>
-                  <div className="stat-line"><dt>파세이브율</dt><dd>{review.parSaveRate === null ? '—' : `${review.parSaveRate}%`}</dd></div>
-                  <div className="stat-line"><dt>1펏</dt><dd>{review.onePuttCount}회</dd></div>
-                  <div className="stat-line"><dt>3펏</dt><dd>{review.threePuttCount}회</dd></div>
-                </dl>
+                {headline ? <p className="compare-line">{headline}</p> : <p className="compare-line">마친 라운드가 없으면 이번 기록만 보여 줍니다.</p>}
+                <StatList
+                  listId={`review-${review.playerId}`}
+                  label={`${playerLabel} 기록`}
+                  rows={stats.map((stat) => ({
+                    id: stat.id,
+                    label: stat.label,
+                    display: stat.display,
+                    formula: stat.formula,
+                    explanation: stat.explanation,
+                    note: comparisonNote(comparisons.find((comparison) => comparison.id === stat.id), session.history.length),
+                  }))}
+                />
                 {types.length ? <ul className="score-type-list">{types.map((type) => <li key={type.key}>{type.label} {type.count}</li>)}</ul> : null}
                 {review.lostStrokeHoles.length ? (
                   <div>
@@ -331,6 +369,11 @@ export function App() {
         {historySummary ? (
           <>
             <p>첫 번째 선수 기준 {historySummary.rounds}라운드. 평균 {historySummary.averageStrokes}타, 평균 {relativeScoreLabel(historySummary.averageRelative)}.</p>
+            <StatList
+              listId="history-average"
+              label="지난 라운드 평균"
+              rows={reviewStatIdsWithSamples(historyPeersForCard)}
+            />
             <ol>
               {[...session.history].reverse().map((record) => {
                 const player = record.players[0];
@@ -371,38 +414,15 @@ export function App() {
         ) : null}
       </section>
 
-      <div className="advance-bar">
-        <button type="button" onClick={controller.advanceHole}>다음 홀</button>
-      </div>
-
-      {settingsOpen ? (
-        <div className="sheet-backdrop">
-          <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-            <h2 id="settings-title">라운드 설정</h2>
-            <div className="field-grid">
-              <label className="field-card">라운드 이름<input value={round.roundName} onChange={(event) => session.updateRoundLabels({ roundName: event.currentTarget.value })} placeholder="토요일 오전" /></label>
-              <label className="field-card">코스 이름<input value={round.courseName} onChange={(event) => session.updateRoundLabels({ courseName: event.currentTarget.value })} placeholder="남코스" /></label>
-              <label className="field-card">홀 수<input inputMode="numeric" value={holeCountDraft} onBlur={normalizeHoleCountDraft} onChange={(event) => updateHoleCountDraft(event.currentTarget.value)} /></label>
-              <div className="field-card">
-                <span>플레이어 수</span>
-                <div className="segmented-control" role="radiogroup" aria-label="플레이어 수">
-                  {scorecardPlayerCountOptions.map((count) => (
-                    <button className="segment" key={count} type="button" role="radio" aria-checked={round.players.length === count} onClick={() => session.setPlayerCount(count)}>{count}명</button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <div className="player-editor">
-              {round.players.map((player, index) => (
-                <label className="field-card" key={player.id}>{index + 1}번<input value={player.name} placeholder={`${index + 1}번`} onChange={(event) => session.updatePlayer(player.id, { name: event.currentTarget.value })} /></label>
-              ))}
-            </div>
-            <div className="sheet-actions">
-              <button className="secondary-button" type="button" onClick={() => setConfirmKind('reset')}>새 라운드</button>
-              <button className="primary-button" type="button" onClick={() => setSettingsOpen(false)}>닫기</button>
-            </div>
-          </div>
-        </div>
+      {settingsOpen && setupDraft ? (
+        <RoundSetupSheet
+          round={round}
+          draft={setupDraft}
+          onDraft={setSetupDraft}
+          onSave={saveSetup}
+          onClose={requestCloseSettings}
+          onNewRound={() => setConfirmKind('reset')}
+        />
       ) : null}
 
       {confirmKind ? (
@@ -421,6 +441,29 @@ export function App() {
   );
 }
 
+function reviewStatIdsWithSamples(peers: readonly FinishedRoundPlayer[]) {
+  return reviewStatIds().flatMap((id) => {
+    const definition = reviewStatDefinition(id);
+    if (!definition) {
+      return [];
+    }
+    const values = peers.map((peer) => statValueFromHistory(peer, id)).filter((value): value is number => value !== null);
+    if (values.length === 0) {
+      return [];
+    }
+    const average = Math.round((values.reduce((sum, value) => sum + value, 0) / values.length) * 10) / 10;
+    const display = id === 'totalStrokes' || id === 'penaltyStrokes' ? `${formatStatValue(average, definition.unit)}타` : formatStatValue(average, definition.unit);
+    return [{
+      id,
+      label: definition.label,
+      display,
+      formula: definition.formula,
+      explanation: definition.explanation,
+      note: `저장한 ${values.length}라운드 평균입니다. 이 항목이 없는 예전 기록은 빠집니다.`,
+    }];
+  });
+}
+
 function blobToDataUrl(blob: Blob): Promise<string> {
   if (typeof FileReader === 'undefined') {
     return Promise.reject(new Error('file reader unavailable'));
@@ -431,9 +474,4 @@ function blobToDataUrl(blob: Blob): Promise<string> {
     reader.onerror = () => reject(reader.error ?? new Error('file reader failed'));
     reader.readAsDataURL(blob);
   });
-}
-
-function clampInteger(value: number, min: number, max: number): number {
-  const integer = Number.isFinite(value) ? Math.round(value) : min;
-  return Math.min(max, Math.max(min, integer));
 }

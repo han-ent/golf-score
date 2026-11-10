@@ -8,11 +8,13 @@ import {
   applyHoleSetupMutation,
   applyPlayerCountMutation,
   applyPlayerMutation,
+  applyRoundEditorMutation,
   applyRoundLabelMutation,
   applyRoundSetupMutation,
   createDefaultScorecardRound,
   type ScorecardHoleScoreInput,
   type ScorecardPlayer,
+  type RoundEditorInput,
   type ScorecardRoundLabels,
   type ScorecardRound,
   type ScorecardRoundSettings,
@@ -41,6 +43,7 @@ export type ScorecardRoundSession = ScorecardRoundSessionState & {
   readonly updateRoundSetup: (patch: Partial<Pick<ScorecardRoundSettings, 'holeCount'>>) => void;
   readonly setPlayerCount: (playerCount: number) => void;
   readonly updatePlayer: (playerId: string, patch: Partial<Pick<ScorecardPlayer, 'name'>>) => void;
+  readonly applyRoundEditor: (input: RoundEditorInput) => void;
   readonly updateHoleSetup: (holeNumber: number, patch: { readonly par?: number }) => void;
   readonly updateHoleScore: (holeNumber: number, playerId: string, score: ScorecardHoleScoreInput | null) => void;
   readonly updateHoleMemo: (holeNumber: number, memo: string) => void;
@@ -103,6 +106,10 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
 
   function updatePlayer(playerId: string, patch: Partial<Pick<ScorecardPlayer, 'name'>>) {
     commitRound(applyPlayerMutation(state.round, playerId, patch));
+  }
+
+  function applyRoundEditor(input: RoundEditorInput) {
+    commitRound(applyRoundEditorMutation(state.round, input));
   }
 
   function updateHoleSetup(holeNumber: number, patch: { readonly par?: number }) {
@@ -190,6 +197,7 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     updateRoundSetup,
     setPlayerCount,
     updatePlayer,
+    applyRoundEditor,
     updateHoleSetup,
     updateHoleScore,
     updateHoleMemo,

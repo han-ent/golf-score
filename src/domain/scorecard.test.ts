@@ -4,14 +4,18 @@ import {
   applyHoleMemoMutation,
   applyHolePenaltyMutation,
   applyHoleScoreMutation,
+  applyHoleSetupMutation,
   applyPlayerCountMutation,
+  applyRoundEditorMutation,
   buildScorecardView,
   createDefaultScorecardRound,
+  describeHoleScore,
   displayPlayerName,
   relativeScoreLabel,
   scorecardPlayerLabel,
   visibleScoreTypeCounts,
 } from './scorecard';
+import { reviewStatsFor } from './reviewStats';
 
 describe('simple scorecard domain', () => {
   it('creates a blank 1-player scorecard by default', () => {
@@ -111,9 +115,83 @@ describe('simple scorecard domain', () => {
       parSaveRate: 50,
       onePuttCount: 1,
       threePuttCount: 1,
-      lostStrokeHoles: [{ holeNumber: 3, label: 'OB' }],
+      lostStrokeHoles: [{ holeNumber: 3, label: 'OB +2' }],
+      penaltyStrokes: 2,
     });
-    expect(visibleScoreTypeCounts(review!.scoreTypeCounts).map((entry) => entry.key)).toEqual(['par', 'doubleBogey']);
+    expect(round.holes[2]?.scores[0]?.strokes).toBe(8);
+    expect(visibleScoreTypeCounts(review!.scoreTypeCounts).map((entry) => entry.key)).toEqual(['par', 'tripleOrWorse']);
     expect(round.holes[0]?.scores[0]).toMatchObject({ putts: 2, puttsAssumed: false });
+  });
+
+  it('adds OB +2 and hazard +1 to the stroke total and keeps the breakdown stable', () => {
+    let round = applyHolePenaltyMutation(createDefaultScorecardRound(), 1, 'player-1', 'ob');
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2, puttsAssumed: true });
+    expect(round.holes[0]?.scores[0]).toMatchObject({ strokes: 6, onGreenShots: 2, putts: 2, puttsAssumed: true, includedPenaltyStrokes: 2 });
+    expect(describeHoleScore(4, round.holes[0]?.scores[0], round.holes[0]?.penalties[0])).toMatchObject({
+      strokes: 6,
+      relativeLabel: '+2',
+      badges: ['OB +2'],
+      summary: '2온 + 2펏 + OB 2 = 6타 (파 대비 +2)',
+    });
+
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 2, putts: 4, puttsAssumed: false });
+    expect(round.holes[0]?.scores[0]?.strokes).toBe(8);
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'hazard');
+    expect(round.holes[0]?.scores[0]?.strokes).toBe(9);
+    expect(buildScorecardView(round).holes[0]?.cells[0]).toMatchObject({ main: '+5', badge: 'OB +2 · 해저드 +1' });
+
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob');
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'hazard');
+    expect(round.holes[0]?.scores[0]?.strokes).toBe(6);
+    expect(round.holes[0]?.penalties).toEqual([]);
+  });
+
+  it('counts scrambling, birdie rate, par averages, and bounce back from on/putt input', () => {
+    let round = createDefaultScorecardRound();
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 5, entryMode: 'on-putt', onGreenShots: 3, putts: 2 });
+    round = applyHoleScoreMutation(round, 2, 'player-1', { strokes: 3, entryMode: 'on-putt', onGreenShots: 2, putts: 1 });
+    round = applyHoleSetupMutation(round, 3, { par: 3 });
+    round = applyHoleScoreMutation(round, 3, 'player-1', { strokes: 3, entryMode: 'on-putt', onGreenShots: 1, putts: 2 });
+    round = applyHoleSetupMutation(round, 4, { par: 5 });
+    round = applyHoleScoreMutation(round, 4, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 4, putts: 2 });
+
+    const review = buildScorecardView(round).reviews[0];
+    expect(review).toMatchObject({
+      parSaveRate: 0,
+      birdieOrBetterRate: 25,
+      bogeyAvoidance: 50,
+      bounceBackRate: 100,
+      par3Average: 3,
+      par4Average: 4,
+      par5Average: 6,
+      puttsPerGir: 1.5,
+    });
+    const stats = reviewStatsFor(review!);
+    const scrambling = stats.find((stat) => stat.id === 'scrambling');
+    const gir = stats.find((stat) => stat.id === 'girRate');
+    expect(scrambling).toMatchObject({ label: '스크램블링(파세이브)', display: '0%', numeric: 0 });
+    expect(scrambling?.explanation).toContain('파온을 놓친 홀에서 파 이하로 막아낸 비율');
+    expect(scrambling?.explanation).not.toContain('파 이상');
+    expect(scrambling?.explanation).toContain('파4 3온 1펏 파');
+    expect(gir?.formula).toContain('파온 홀');
+    expect(gir?.explanation).toContain('샷으로 그린까지');
+    expect(gir?.explanation).toContain('파3은 1온');
+    expect(stats.find((stat) => stat.id === 'bounceBackRate')?.explanation).toContain('버디');
+  });
+
+  it('applies round setup names only through the editor mutation', () => {
+    const round = applyRoundEditorMutation(createDefaultScorecardRound(), {
+      roundName: '토요일',
+      courseName: '남코스',
+      holeCount: 9,
+      playerCount: 2,
+      names: ['영석', '민준'],
+    }, '2026-08-01T00:00:00.000Z');
+
+    expect(round.roundName).toBe('토요일');
+    expect(round.courseName).toBe('남코스');
+    expect(round.settings.holeCount).toBe(9);
+    expect(round.players.map((player) => player.name)).toEqual(['영석', '민준']);
+    expect(round.holes).toHaveLength(9);
   });
 });

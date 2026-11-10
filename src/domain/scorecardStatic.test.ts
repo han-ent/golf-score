@@ -71,6 +71,14 @@ describe('simple scorecard static guardrails', () => {
     expect(scorecardCss).toContain('width: max-content');
   });
 
+  it('keeps layout spacing on the 4/8/12/16/24/32 scale', () => {
+    const css = ['src/styles.css', 'src/scorecard.css'].map(readRepoFile).join('\n');
+    const declarations = css.match(/(?:^|[{;])\s*(?:margin|padding|gap|row-gap|column-gap)\s*:[^;]+/g) ?? [];
+    const rawPixels = declarations.flatMap((declaration) => declaration.match(/\d+px/g) ?? []);
+    const allowed = new Set(['0px', '4px', '8px', '12px', '16px', '24px', '32px']);
+    expect(rawPixels.filter((value) => !allowed.has(value))).toEqual([]);
+  });
+
   it('keeps the next-hole action and selected player controls explicit', () => {
     const appSource = readRepoFile('src/App.tsx');
     const gridSource = readRepoFile('src/ScorecardGrid.tsx');

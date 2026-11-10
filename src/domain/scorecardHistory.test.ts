@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyHoleScoreMutation, createDefaultScorecardRound } from './scorecard';
+import { applyHoleScoreMutation, buildScorecardView, createDefaultScorecardRound } from './scorecard';
 import type { StorageLike } from './scorecardStorage';
-import { appendScorecardHistory, createFinishedRoundRecord, loadScorecardHistory, summarizeScorecardHistory } from './scorecardHistory';
+import { appendScorecardHistory, compareStats, createFinishedRoundRecord, firstPlayerPeers, loadScorecardHistory, statValueFromHistory, summarizeScorecardHistory } from './scorecardHistory';
+import { reviewStatsFor } from './reviewStats';
 
 class MemoryStorage implements StorageLike {
   private readonly values = new Map<string, string>();
@@ -26,5 +27,34 @@ describe('scorecard history', () => {
     expect(loaded).toHaveLength(1);
     expect(summarizeScorecardHistory(loaded)).toMatchObject({ rounds: 1, averageStrokes: 9, averageRelative: 1, girRates: [50] });
     expect(createFinishedRoundRecord(createDefaultScorecardRound(), '2026-07-02T00:00:00.000Z')).toBeNull();
+    expect(record?.players[0]?.stats?.girRate).toBe(50);
+    expect(record?.players[0]?.stats?.strokesPerHole).toBe(4.5);
+  });
+
+  it('keeps history saved before extended stats and compares only fields those rounds have', () => {
+    const storage = new MemoryStorage();
+    storage.setItem('fungolf-scorecard:history:v1', JSON.stringify({
+      version: 1,
+      rounds: [{
+        id: 'old-round',
+        finishedAt: '2026-05-01T00:00:00.000Z',
+        roundName: '',
+        courseName: '동코스',
+        players: [{ playerId: 'player-1', playerName: '영석', totalStrokes: 90, totalRelative: 18, completedHoles: 18, girRate: 20 }],
+      }],
+    }));
+
+    const loaded = loadScorecardHistory(storage);
+    expect(loaded[0]?.players[0]?.stats).toBeUndefined();
+    expect(statValueFromHistory(loaded[0]!.players[0]!, 'girRate')).toBe(20);
+    expect(statValueFromHistory(loaded[0]!.players[0]!, 'strokesPerHole')).toBe(5);
+    expect(statValueFromHistory(loaded[0]!.players[0]!, 'scrambling')).toBeNull();
+
+    let round = createDefaultScorecardRound();
+    round = { ...round, players: [{ id: 'player-1', name: '영석' }] };
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2 });
+    const comparisons = compareStats(reviewStatsFor(buildScorecardView(round).reviews[0]!), firstPlayerPeers(loaded));
+    expect(comparisons.find((comparison) => comparison.id === 'girRate')).toMatchObject({ current: 100, average: 20, samples: 1 });
+    expect(comparisons.find((comparison) => comparison.id === 'scrambling')).toMatchObject({ average: null, samples: 0 });
   });
 });
