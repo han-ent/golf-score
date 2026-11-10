@@ -229,7 +229,7 @@ function reviewTextLines(view: ScorecardRoundView): readonly string[] {
       `${review.completedHoles}홀 · 총타 ${strokes} · ${score}`,
       `전반 ${relativeScoreLabel(review.frontRelative)} · 후반 ${relativeScoreLabel(review.backRelative)}`,
       `온 평균 ${formatStat(review.averageOnGreenShots)} · 펏 평균 ${formatStat(review.averagePutts)}`,
-      `파온율 ${formatPercent(review.girRate)} · 스크램블링 ${formatPercent(review.parSaveRate)}`,
+      `파온율 ${formatPercent(review.girRate)} · 스크램블링(파세이브) ${formatPercent(review.parSaveRate)}`,
       `1펏 ${review.onePuttCount}회 · 3펏 ${review.threePuttCount}회`,
       types || '기록 전',
     ];

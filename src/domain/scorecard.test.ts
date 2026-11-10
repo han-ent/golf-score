@@ -167,8 +167,15 @@ describe('simple scorecard domain', () => {
       puttsPerGir: 1.5,
     });
     const stats = reviewStatsFor(review!);
-    expect(stats.find((stat) => stat.id === 'scrambling')).toMatchObject({ display: '0%', numeric: 0 });
-    expect(stats.find((stat) => stat.id === 'girRate')?.formula).toContain('파온 홀');
+    const scrambling = stats.find((stat) => stat.id === 'scrambling');
+    const gir = stats.find((stat) => stat.id === 'girRate');
+    expect(scrambling).toMatchObject({ label: '스크램블링(파세이브)', display: '0%', numeric: 0 });
+    expect(scrambling?.explanation).toContain('파온을 놓친 홀에서 파 이하로 막아낸 비율');
+    expect(scrambling?.explanation).not.toContain('파 이상');
+    expect(scrambling?.explanation).toContain('파4 3온 1펏 파');
+    expect(gir?.formula).toContain('파온 홀');
+    expect(gir?.explanation).toContain('샷으로 그린까지');
+    expect(gir?.explanation).toContain('파3은 1온');
     expect(stats.find((stat) => stat.id === 'bounceBackRate')?.explanation).toContain('버디');
   });
 
