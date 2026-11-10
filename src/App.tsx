@@ -2,6 +2,7 @@ import { useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 
 import { HistoryRoundSheet } from './HistoryRoundSheet';
+import { PastRoundList } from './PastRoundList';
 import { RoundSetupSheet } from './RoundSetupSheet';
 import { ScorecardGrid } from './ScorecardGrid';
 import { StatList } from './StatList';
@@ -13,7 +14,7 @@ import {
   visibleScoreTypeCounts,
   type QuickScoreKind,
 } from './domain/scorecard';
-import { compareStats, comparisonHeadline, comparisonNote, firstPlayerPeers, formatFinishedRoundWhen, historyPeers, statValueFromHistory, summarizeScorecardHistory, type FinishedRoundPlayer } from './domain/scorecardHistory';
+import { compareStats, comparisonHeadline, comparisonNote, firstPlayerPeers, historyPeers, statValueFromHistory, summarizeScorecardHistory, type FinishedRoundPlayer } from './domain/scorecardHistory';
 import { formatStatValue, reviewStatDefinition, reviewStatIds, reviewStatsFor } from './domain/reviewStats';
 import { isRoundSetupDraftDirty, roundEditorFromDraft, roundSetupDraftFromRound, type RoundSetupDraft } from './roundSetup';
 import { useFieldPreferences } from './preferences';
@@ -33,7 +34,7 @@ const quickKinds = [
 ] as const;
 
 type ExportPreview = { readonly source: string; readonly fileName: string; readonly blob: Blob };
-type ConfirmKind = 'reset' | 'clear' | 'finish' | 'discard-setup' | 'clear-history' | 'delete-history';
+type ConfirmKind = 'reset' | 'clear' | 'finish' | 'discard-setup' | 'clear-history' | 'delete-history' | 'delete-selected';
 
 export function App() {
   const session = useScorecardSession();
@@ -49,6 +50,7 @@ export function App() {
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
   const [viewedHistoryId, setViewedHistoryId] = useState<string | null>(null);
   const [pendingHistoryId, setPendingHistoryId] = useState<string | null>(null);
+  const [historySelection, setHistorySelection] = useState<readonly string[] | null>(null);
   useViewportSheet(settingsOpen || confirmKind !== null || viewedHistoryId !== null);
   const controller = useScorecardController({ round, session });
   const memoOpen = memoState.hole === controller.holeNumber && memoState.open;
@@ -77,8 +79,9 @@ export function App() {
     setSettingsOpen(true);
   }
 
-  function requestCloseSettings() {
-    if (setupDraft && isRoundSetupDraftDirty(setupDraft, round)) {
+  function requestCloseSettings(next: RoundSetupDraft) {
+    setSetupDraft(next);
+    if (isRoundSetupDraftDirty(next, round)) {
       setConfirmKind('discard-setup');
       return;
     }
@@ -86,11 +89,11 @@ export function App() {
     setSetupDraft(null);
   }
 
-  function saveSetup() {
-    if (!setupDraft || !isRoundSetupDraftDirty(setupDraft, round)) {
+  function saveSetup(next: RoundSetupDraft) {
+    if (!isRoundSetupDraftDirty(next, round)) {
       return;
     }
-    session.applyRoundEditor(roundEditorFromDraft(setupDraft, round.settings.holeCount));
+    session.applyRoundEditor(roundEditorFromDraft(next, round.settings.holeCount));
     setSettingsOpen(false);
     setSetupDraft(null);
   }
@@ -174,12 +177,21 @@ export function App() {
     if (confirmKind === 'clear-history') {
       session.clearHistory();
       setViewedHistoryId(null);
+      setHistorySelection(null);
     }
     if (confirmKind === 'delete-history' && pendingHistoryId) {
       session.deleteHistoryRecord(pendingHistoryId);
       if (viewedHistoryId === pendingHistoryId) {
         setViewedHistoryId(null);
       }
+      setHistorySelection((current) => current?.filter((id) => id !== pendingHistoryId) ?? null);
+    }
+    if (confirmKind === 'delete-selected' && historySelection && historySelection.length > 0) {
+      session.deleteHistoryRecords(historySelection);
+      if (viewedHistoryId && historySelection.includes(viewedHistoryId)) {
+        setViewedHistoryId(null);
+      }
+      setHistorySelection(null);
     }
     setPendingHistoryId(null);
     setConfirmKind(null);
@@ -201,6 +213,12 @@ export function App() {
     'delete-history': {
       title: '이 지난 기록 삭제',
       body: `${pendingHistoryName} 기록이 지난 라운드에서 지워집니다. 되돌릴 수 없습니다. 지금 치고 있는 라운드는 그대로 남습니다.`,
+      confirm: '삭제',
+      danger: true,
+    },
+    'delete-selected': {
+      title: '선택한 기록 삭제',
+      body: `선택한 ${historySelection?.length ?? 0}개 기록을 삭제할까요? 되돌릴 수 없습니다.`,
       confirm: '삭제',
       danger: true,
     },
@@ -417,23 +435,20 @@ export function App() {
               label="지난 라운드 평균"
               rows={reviewStatIdsWithSamples(historyPeersForCard)}
             />
-            <p className="history-meta">항목을 누르면 그 라운드 스코어카드를 봅니다. 지금 라운드는 바뀌지 않습니다.</p>
-            <ol>
-              {[...session.history].reverse().map((record) => (
-                <li key={record.id}>
-                  <button className="history-round" type="button" onClick={() => setViewedHistoryId(record.id)}>
-                    <span className="history-when">{formatFinishedRoundWhen(record.finishedAt)}</span>
-                    <strong className="clip">{record.courseName.trim() || record.roundName.trim() || '라운드'}</strong>
-                    {record.players.map((player) => (
-                      <span className="stat-line" key={player.playerId}>
-                        <span className="clip">{player.playerName || '플레이어'}</span>
-                        <b>{player.totalStrokes}타 {relativeScoreLabel(player.totalRelative)}</b>
-                      </span>
-                    ))}
-                  </button>
-                </li>
-              ))}
-            </ol>
+            <PastRoundList
+              records={[...session.history].reverse()}
+              selecting={historySelection !== null}
+              selectedIds={historySelection ?? []}
+              onOpen={(recordId) => setViewedHistoryId(recordId)}
+              onStartSelecting={(recordId) => setHistorySelection((current) => current?.includes(recordId) ? current : [...(current ?? []), recordId])}
+              onToggle={(recordId) => setHistorySelection((current) => {
+                const ids = current ?? [];
+                return ids.includes(recordId) ? ids.filter((id) => id !== recordId) : [...ids, recordId];
+              })}
+              onSelectAll={() => setHistorySelection(session.history.map((record) => record.id))}
+              onCancelSelection={() => setHistorySelection(null)}
+              onAskDelete={() => setConfirmKind('delete-selected')}
+            />
           </>
         ) : <p>마친 라운드가 없습니다.</p>}
         <button className="secondary-button" type="button" disabled={!hasScores} onClick={() => setConfirmKind('finish')}>이 라운드 마치기</button>

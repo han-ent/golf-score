@@ -191,17 +191,49 @@ export function clearScorecardHistory(storage: StorageLike | undefined): boolean
 }
 
 export function removeScorecardHistoryRecord(storage: StorageLike | undefined, recordId: string): readonly FinishedRoundRecord[] | null {
+  return removeScorecardHistoryRecords(storage, [recordId]);
+}
+
+export function removeScorecardHistoryRecords(storage: StorageLike | undefined, recordIds: readonly string[]): readonly FinishedRoundRecord[] | null {
   if (!storage) {
     return null;
   }
 
   try {
-    const next = loadScorecardHistory(storage).filter((record) => record.id !== recordId);
+    const drop = new Set(recordIds);
+    const next = loadScorecardHistory(storage).filter((record) => !drop.has(record.id));
     storage.setItem(scorecardHistoryStorageKey, JSON.stringify({ version: historyVersion, rounds: next }));
     return next;
   } catch {
     return null;
   }
+}
+
+export function formatPenaltyHoleSummary(round: ScorecardRound): string {
+  const multiple = round.players.length > 1;
+  const parts: string[] = [];
+  round.players.forEach((player, index) => {
+    let ob = 0;
+    let hazard = 0;
+    const obHoles: number[] = [];
+    const hazardHoles: number[] = [];
+    for (const hole of round.holes) {
+      const mark = hole.penalties.find((penalty) => penalty.playerId === player.id);
+      if (!mark) continue;
+      if (mark.ob > 0) {
+        ob += mark.ob;
+        obHoles.push(hole.holeNumber);
+      }
+      if (mark.hazard > 0) {
+        hazard += mark.hazard;
+        hazardHoles.push(hole.holeNumber);
+      }
+    }
+    const prefix = multiple ? `${player.name.trim() || `${index + 1}번`} ` : '';
+    if (ob > 0) parts.push(`${prefix}OB ${ob}회 (${obHoles.map((hole) => `${hole}번`).join(', ')})`);
+    if (hazard > 0) parts.push(`${prefix}해저드 ${hazard}회 (${hazardHoles.map((hole) => `${hole}번`).join(', ')})`);
+  });
+  return parts.join(' · ');
 }
 
 export function appendScorecardHistory(storage: StorageLike | undefined, record: FinishedRoundRecord): boolean {

@@ -74,7 +74,8 @@
   color: #141414;
 }
 
-button.scorecard-cell {
+button.scorecard-cell,
+.scorecard-cell.static {
   display: grid;
   place-items: center;
   align-content: center;
@@ -133,6 +134,16 @@ button.scorecard-cell {
 
 .score-cell.has-penalty {
   box-shadow: inset 3px 0 0 var(--brass);
+}
+
+.score-marker {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 4px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--brass);
 }
 
 .score-cell.active.has-penalty {
