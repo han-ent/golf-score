@@ -706,8 +706,9 @@ button.stat-line {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;
+  padding-bottom: var(--space-4);
   scroll-padding-top: var(--space-2);
-  scroll-padding-bottom: var(--space-2);
+  scroll-padding-bottom: var(--space-4);
 }
 .sheet.setup-sheet .sheet-header {
   position: sticky;

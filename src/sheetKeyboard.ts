@@ -1,4 +1,6 @@
 export const keyboardOcclusionThreshold = 120;
+const focusRingExtent = 4;
+const fieldClearance = 12;
 
 export function viewportIsKeyboardOccluded(windowHeight: number, viewportHeight: number): boolean {
   return windowHeight - viewportHeight >= keyboardOcclusionThreshold;
@@ -24,10 +26,11 @@ export function placeFieldAboveFooter(field: HTMLElement): void {
     const scroller = sheet.querySelector('.sheet-body');
     if (!(scroller instanceof HTMLElement)) return;
     const view = scroller.getBoundingClientRect();
-    const delta = scrollDeltaToClearFooter(fieldBox, view.top, view.bottom);
+    const limitBottom = view.bottom - fieldClearance - focusRingExtent;
+    const delta = scrollDeltaToClearFooter(fieldBox, view.top, limitBottom);
     if (delta === 0) return;
     scroller.scrollTop += delta;
-    const again = scrollDeltaToClearFooter(target.getBoundingClientRect(), view.top, view.bottom);
+    const again = scrollDeltaToClearFooter(target.getBoundingClientRect(), view.top, limitBottom);
     if (again !== 0) scroller.scrollTop += again;
     return;
   }
@@ -56,7 +59,7 @@ export function syncSheetFooterHeight(sheet: HTMLElement): void {
   sheet.style.scrollPaddingBottom = footerSpace;
   const body = sheet.querySelector('.sheet-body');
   if (body instanceof HTMLElement) {
-    body.style.scrollPaddingTop = '8px';
-    body.style.scrollPaddingBottom = '8px';
+    body.style.scrollPaddingBottom = `${fieldClearance + focusRingExtent}px`;
+    body.style.paddingBottom = `${fieldClearance + focusRingExtent}px`;
   }
 }
