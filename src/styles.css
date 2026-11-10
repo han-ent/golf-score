@@ -695,6 +695,13 @@ button.stat-line {
   overflow: auto;
   overscroll-behavior: contain;
 }
+.sheet.setup-sheet {
+  scroll-padding-top: 56px;
+  scroll-padding-bottom: var(--sheet-footer, 0px);
+}
+.sheet.setup-sheet.keyboard-open .sheet-body {
+  padding-bottom: var(--sheet-footer, 0px);
+}
 .sheet > h2,
 .history-viewer-bar,
 .sheet-actions {
@@ -704,7 +711,23 @@ button.stat-line {
 }
 .sheet > h2,
 .history-viewer-bar { top: 0; }
-.sheet-actions { bottom: 0; }
+.sheet-actions {
+  bottom: 0;
+  margin-right: calc(var(--space-5) * -1);
+  margin-bottom: calc(var(--space-5) * -1);
+  margin-left: calc(var(--space-5) * -1);
+  padding: var(--space-3) var(--space-5) var(--space-5);
+  background: var(--surface);
+  box-shadow: 0 -12px 0 var(--surface);
+}
+.sheet.keyboard-open .sheet-actions {
+  padding-top: var(--space-2);
+  padding-bottom: var(--space-3);
+}
+.sheet.keyboard-open .sheet-actions .primary-button {
+  height: 40px;
+  min-height: 40px;
+}
 .sheet-body {
   display: grid;
   gap: var(--space-4);

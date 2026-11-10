@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { createDefaultScorecardRound } from './domain/scorecard';
 import { RoundSetupSheet } from './RoundSetupSheet';
 import { roundSetupDraftFromRound, type RoundSetupDraft } from './roundSetup';
+import { scrollDeltaToClearFooter, viewportIsKeyboardOccluded } from './sheetKeyboard';
 import { useViewportSheet } from './useViewportSheet';
 
 type ViewportStub = {
@@ -100,7 +101,111 @@ describe('round setup typing', () => {
     expect(sheet.scrollTop).toBe(40);
     view.unmount();
   });
+
+  it('keeps the focused setup field above the collapsed footer when the keyboard covers the sheet', async () => {
+    expect(viewportIsKeyboardOccluded(844, 420)).toBe(true);
+    expect(viewportIsKeyboardOccluded(844, 780)).toBe(false);
+    expect(scrollDeltaToClearFooter({ top: 300, bottom: 380 }, 56, 336)).toBe(44);
+
+    Object.defineProperty(window, 'innerHeight', { configurable: true, value: 844 });
+    viewport.width = 390;
+    viewport.height = 420;
+    const view = await renderSheet();
+    const sheet = document.querySelector('.sheet');
+    if (!(sheet instanceof HTMLElement)) throw new Error('missing sheet');
+    const layout = installKeyboardLayout(sheet);
+
+    try {
+      for (const name of ['roundName', 'holeCount', 'name-0']) {
+        const input = field(name);
+        await act(async () => {
+          input.focus();
+          viewport.dispatch('resize');
+        });
+        const label = input.closest('label');
+        const footer = document.querySelector('.sheet-actions');
+        if (!(label instanceof HTMLElement) || !(footer instanceof HTMLElement)) throw new Error('missing field');
+        const fieldBox = label.getBoundingClientRect();
+        const footerBox = footer.getBoundingClientRect();
+        expect(sheet.classList.contains('keyboard-open')).toBe(true);
+        expect(document.querySelector('.sheet-actions .save-state')).toBeNull();
+        expect(document.body.textContent).not.toContain('새 라운드');
+        expect(document.body.textContent).not.toContain('저장 안 함');
+        expect(document.body.textContent).toContain('저장');
+        expect(sheet.style.scrollPaddingBottom).toBe(sheet.style.getPropertyValue('--sheet-footer'));
+        expect(sheet.style.scrollPaddingBottom.endsWith('px')).toBe(true);
+        expect(document.querySelector('.sheet-body')?.getAttribute('style')).toContain('padding-bottom');
+        expect(fieldBox.height).toBeGreaterThan(0);
+        expect(fieldBox.top).toBeGreaterThanOrEqual(0);
+        expect(fieldBox.bottom).toBeLessThanOrEqual(viewport.height);
+        expect(fieldBox.bottom).toBeLessThanOrEqual(footerBox.top);
+        expect(fieldBox.left).toBeGreaterThanOrEqual(0);
+        expect(fieldBox.right).toBeLessThanOrEqual(390);
+        expect(intersects(fieldBox, footerBox)).toBe(false);
+        if (name === 'roundName') expect(label.textContent).toContain('라운드 이름');
+      }
+      viewport.height = 844;
+      await act(async () => {
+        viewport.dispatch('resize');
+      });
+      expect(sheet.classList.contains('keyboard-open')).toBe(false);
+      expect(document.body.textContent).toContain('새 라운드');
+      expect(document.body.textContent).toContain('변경 없음');
+    } finally {
+      layout.restore();
+    }
+    view.unmount();
+  });
 });
+
+function intersects(field: DOMRect, footer: DOMRect): boolean {
+  return field.top < footer.bottom && field.bottom > footer.top && field.left < footer.right && field.right > footer.left;
+}
+
+function installKeyboardLayout(sheet: HTMLElement): { restore: () => void } {
+  let scroll = 0;
+  const originalRect = HTMLElement.prototype.getBoundingClientRect;
+  const originalDescriptor = Object.getOwnPropertyDescriptor(sheet, 'scrollTop') ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+  Object.defineProperty(sheet, 'scrollTop', {
+    configurable: true,
+    get: () => scroll,
+    set: (value: number) => {
+      scroll = value;
+    },
+  });
+  HTMLElement.prototype.getBoundingClientRect = function () {
+    if (this === sheet) return rect(0, 8, 390, 400);
+    if (this.classList.contains('sheet-actions')) return rect(0, 348, 390, 56);
+    if (this.tagName === 'H2') return rect(0, 8, 390, 36);
+    if (this.tagName === 'LABEL') {
+      const input = this.querySelector('input');
+      const name = input?.getAttribute('name');
+      const natural = name === 'roundName' ? 300 : name === 'holeCount' ? 460 : name === 'name-0' ? 620 : 180;
+      return rect(0, natural - scroll, 390, 72);
+    }
+    return rect(0, 0, 0, 0);
+  };
+  return {
+    restore: () => {
+      HTMLElement.prototype.getBoundingClientRect = originalRect;
+      if (originalDescriptor) Object.defineProperty(sheet, 'scrollTop', originalDescriptor);
+    },
+  };
+}
+
+function rect(x: number, y: number, width: number, height: number): DOMRect {
+  return {
+    x,
+    y,
+    left: x,
+    top: y,
+    width,
+    height,
+    right: x + width,
+    bottom: y + height,
+    toJSON() { return this; },
+  } as DOMRect;
+}
 
 function field(name: string): HTMLInputElement {
   const input = document.querySelector(`input[name="${name}"]`);
