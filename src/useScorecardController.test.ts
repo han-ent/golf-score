@@ -49,7 +49,7 @@ describe('scorecard controller pure behavior', () => {
     expect(scoreAfterOnGreenChoice(2, { entryMode: 'on-putt', putts: 3, puttsAssumed: false })).toMatchObject({ putts: 3, puttsAssumed: false, strokes: 5 });
   });
 
-  it('maps one-tap scores to the hole par and advances to the next player, then the next hole', () => {
+  it('maps one-tap scores to the hole par and keeps explicit next-step math', () => {
     expect(quickScoreForPar(3, 'par')).toEqual({ onGreenShots: 1, putts: 2 });
     expect(quickScoreForPar(3, 'bogey')).toEqual({ onGreenShots: 2, putts: 2 });
     expect(quickScoreForPar(3, 'double')).toEqual({ onGreenShots: 3, putts: 2 });

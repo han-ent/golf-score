@@ -26,6 +26,8 @@ export type ScorecardHoleScore = {
   readonly putts?: number;
   readonly puttsAssumed?: boolean;
   readonly holeInOne?: boolean;
+  /** Penalty strokes already folded into `strokes`. Missing on legacy manual scores. */
+  readonly includedPenaltyStrokes?: number;
 };
 
 export type HolePenaltyMark = {
@@ -58,6 +60,7 @@ export type ScorecardCellView = {
   readonly holeNumber: number;
   readonly main: string;
   readonly sub: string;
+  readonly badge: string;
 };
 
 export type ScoreTypeCounts = {
@@ -89,6 +92,19 @@ export type ScorecardPlayerReview = {
   readonly parSaveOpportunities: number;
   readonly parSaveRate: number | null;
   readonly lostStrokeHoles: readonly ScorecardLostStroke[];
+  readonly strokesPerHole: number | null;
+  readonly puttsPerGir: number | null;
+  readonly birdieOrBetterRate: number | null;
+  readonly bogeyAvoidance: number | null;
+  readonly bounceBackRate: number | null;
+  readonly par3Average: number | null;
+  readonly par4Average: number | null;
+  readonly par5Average: number | null;
+  readonly penaltyStrokes: number;
+  readonly onePuttRate: number | null;
+  readonly threePuttRate: number | null;
+  readonly frontHoles: number;
+  readonly backHoles: number;
 };
 
 export type ScorecardLostStroke = {
@@ -243,6 +259,24 @@ export function applyPlayerMutation(
   );
 }
 
+export type RoundEditorInput = {
+  readonly roundName: string;
+  readonly courseName: string;
+  readonly holeCount: number;
+  readonly playerCount: number;
+  readonly names: readonly string[];
+};
+
+export function applyRoundEditorMutation(round: ScorecardRound, input: RoundEditorInput, now = new Date().toISOString()): ScorecardRound {
+  let next = applyRoundLabelMutation(round, { roundName: input.roundName, courseName: input.courseName }, now);
+  next = applyRoundSetupMutation(next, { holeCount: input.holeCount }, now);
+  next = applyPlayerCountMutation(next, input.playerCount, now);
+  for (const [index, player] of next.players.entries()) {
+    next = applyPlayerMutation(next, player.id, { name: input.names[index] ?? '' }, now);
+  }
+  return next;
+}
+
 export function applyHoleSetupMutation(
   round: ScorecardRound,
   holeNumber: number,
@@ -285,12 +319,10 @@ export function applyHolePenaltyMutation(
 
     const current = hole.penalties.find((penalty) => penalty.playerId === playerId) ?? { playerId, ob: false, hazard: false };
     const next = { ...current, [kind]: !current[kind] };
-    const penalties = hole.penalties.filter((penalty) => penalty.playerId !== playerId);
-    if (!next.ob && !next.hazard) {
-      return { ...hole, penalties };
-    }
-
-    return { ...hole, penalties: [...penalties, next].sort(sortPenalties(round.players)) };
+    const kept = hole.penalties.filter((penalty) => penalty.playerId !== playerId);
+    const penalties = next.ob || next.hazard ? [...kept, next].sort(sortPenalties(round.players)) : kept;
+    const scores = hole.scores.map((score) => (score.playerId === playerId ? scoreWithPenalty(score, penaltyStrokeCount(next)) : score));
+    return { ...hole, penalties, scores };
   });
 
   return stampRound({ ...round, holes }, now);
@@ -319,7 +351,9 @@ export function applyHoleScoreMutation(
       return { ...hole, scores: withoutPlayer };
     }
 
-    return { ...hole, scores: [...withoutPlayer, normalizeScoreInput(playerId, score)].sort(sortScores(round.players)) };
+    const penalty = hole.penalties.find((mark) => mark.playerId === playerId);
+    const nextScore = scoreWithPenalty(normalizeScoreInput(playerId, score), penaltyStrokeCount(penalty));
+    return { ...hole, scores: [...withoutPlayer, nextScore].sort(sortScores(round.players)) };
   });
 
   return stampRound({ ...round, holes }, now);
@@ -329,6 +363,60 @@ export type ScorecardHoleScoreInput =
   | { readonly strokes: number; readonly entryMode?: 'manual' }
   | { readonly strokes: number; readonly entryMode: 'on-putt'; readonly onGreenShots: number; readonly putts: number; readonly puttsAssumed?: boolean }
   | { readonly strokes: 1; readonly entryMode: 'hio'; readonly onGreenShots: 1; readonly putts: 0; readonly holeInOne: true };
+
+export const obPenaltyStrokes = 2;
+export const hazardPenaltyStrokes = 1;
+
+export function penaltyStrokeCount(mark: Pick<HolePenaltyMark, 'ob' | 'hazard'> | undefined): number {
+  if (!mark) {
+    return 0;
+  }
+  return (mark.ob ? obPenaltyStrokes : 0) + (mark.hazard ? hazardPenaltyStrokes : 0);
+}
+
+export function penaltyBadgeText(mark: Pick<HolePenaltyMark, 'ob' | 'hazard'> | undefined): string {
+  return penaltyParts(mark).map((part) => `${part.label} +${part.strokes}`).join(' · ');
+}
+
+export type HoleScoreBreakdown = {
+  readonly strokes: number | null;
+  readonly relativeLabel: string;
+  readonly badges: readonly string[];
+  readonly summary: string;
+};
+
+export function describeHoleScore(par: number, score: ScorecardHoleScore | undefined, penalty: HolePenaltyMark | undefined): HoleScoreBreakdown {
+  const parts = penaltyParts(penalty);
+  const extra = penaltyStrokeCount(penalty);
+  const badges = parts.map((part) => `${part.label} +${part.strokes}`);
+  if (!score) {
+    return {
+      strokes: null,
+      relativeLabel: '—',
+      badges,
+      summary: parts.length ? `${badges.join(' · ')}는 타수를 입력하면 이 홀에 더해집니다.` : '',
+    };
+  }
+
+  const effective = scoreWithPenalty(score, extra);
+  const relativeLabel = relativeScoreLabel(effective.strokes - par);
+  if (score.entryMode === 'manual') {
+    const base = effective.strokes - extra;
+    const summary = parts.length
+      ? `직접 ${base} + ${parts.map((part) => `${part.label} ${part.strokes}`).join(' + ')} = ${effective.strokes}타 (파 대비 ${relativeLabel})`
+      : `직접 ${effective.strokes}타 (파 대비 ${relativeLabel})`;
+    return { strokes: effective.strokes, relativeLabel, badges, summary };
+  }
+
+  const onGreenShots = score.onGreenShots ?? 0;
+  const putts = score.putts ?? 0;
+  const shots = `${onGreenShots}온 + ${putts}펏`;
+  const penaltyText = parts.map((part) => `${part.label} ${part.strokes}`).join(' + ');
+  const summary = penaltyText
+    ? `${shots} + ${penaltyText} = ${effective.strokes}타 (파 대비 ${relativeLabel})`
+    : `${shots} = ${effective.strokes}타 (파 대비 ${relativeLabel})`;
+  return { strokes: effective.strokes, relativeLabel, badges, summary };
+}
 
 export type QuickScoreKind = 'par' | 'bogey' | 'double';
 
@@ -354,7 +442,11 @@ export function buildScorecardView(round: ScorecardRound): ScorecardRoundView {
     holeNumber: hole.holeNumber,
     par: hole.par,
     memo: hole.memo,
-    cells: normalizedRound.players.map((player) => cellViewForScore(player.id, hole.holeNumber, hole.par, scoreForPlayer(normalizedRound, hole.holeNumber, player.id))),
+    cells: normalizedRound.players.map((player) => {
+      const score = scoreForPlayer(normalizedRound, hole.holeNumber, player.id);
+      const penalty = hole.penalties.find((mark) => mark.playerId === player.id);
+      return cellViewForScore(player.id, hole.holeNumber, hole.par, score, penalty);
+    }),
   }));
 
   return {
@@ -424,12 +516,26 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
   let girOpportunities = 0;
   let parSaves = 0;
   let parSaveOpportunities = 0;
+  let frontHoles = 0;
+  let backHoles = 0;
+  let girPutts = 0;
+  let girPuttHoles = 0;
+  let birdieOrBetter = 0;
+  let parOrBetter = 0;
+  let penaltyStrokes = 0;
+  let par3Strokes = 0;
+  let par3Holes = 0;
+  let par4Strokes = 0;
+  let par4Holes = 0;
+  let par5Strokes = 0;
+  let par5Holes = 0;
   const lostStrokeHoles: ScorecardLostStroke[] = [];
+  const holeResults: { holeNumber: number; relative: number }[] = [];
 
   for (const hole of round.holes) {
     const penalty = hole.penalties.find((mark) => mark.playerId === player.id && (mark.ob || mark.hazard));
     if (penalty) {
-      lostStrokeHoles.push({ holeNumber: hole.holeNumber, label: penaltyLabel(penalty) });
+      lostStrokeHoles.push({ holeNumber: hole.holeNumber, label: penaltyBadgeText(penalty) });
     }
 
     const score = scoreForPlayer(round, hole.holeNumber, player.id);
@@ -441,25 +547,50 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
     completedHoles += 1;
     totalStrokes += score.strokes;
     totalRelative += relative;
+    penaltyStrokes += penaltyStrokeCount(penalty);
     if (hole.holeNumber <= 9) {
       frontRelative += relative;
+      frontHoles += 1;
     } else {
       backRelative += relative;
+      backHoles += 1;
     }
     counts[scoreTypeKey(relative)] += 1;
+    if (relative <= -1) {
+      birdieOrBetter += 1;
+    }
+    if (relative <= 0) {
+      parOrBetter += 1;
+    }
+    holeResults.push({ holeNumber: hole.holeNumber, relative });
+    if (hole.par === 3) {
+      par3Strokes += score.strokes;
+      par3Holes += 1;
+    } else if (hole.par === 4) {
+      par4Strokes += score.strokes;
+      par4Holes += 1;
+    } else {
+      par5Strokes += score.strokes;
+      par5Holes += 1;
+    }
 
     if (score.entryMode === 'on-putt' || score.entryMode === 'hio') {
       if (typeof score.onGreenShots === 'number') {
         onGreenTotal += score.onGreenShots;
         onGreenCount += 1;
         girOpportunities += 1;
-        if (score.onGreenShots <= hole.par - 2) {
+        const reachedGreen = score.onGreenShots <= hole.par - 2;
+        if (reachedGreen) {
           girHits += 1;
         } else {
           parSaveOpportunities += 1;
           if (relative <= 0) {
             parSaves += 1;
           }
+        }
+        if (reachedGreen && typeof score.putts === 'number') {
+          girPutts += score.putts;
+          girPuttHoles += 1;
         }
       }
       if (typeof score.putts === 'number') {
@@ -472,6 +603,23 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
           threePuttCount += 1;
         }
       }
+    }
+  }
+
+  const resultsByHole = new Map(holeResults.map((result) => [result.holeNumber, result.relative]));
+  let bounceBackChances = 0;
+  let bounceBackMade = 0;
+  for (const result of holeResults) {
+    if (result.relative < 1) {
+      continue;
+    }
+    const nextRelative = resultsByHole.get(result.holeNumber + 1);
+    if (nextRelative === undefined) {
+      continue;
+    }
+    bounceBackChances += 1;
+    if (nextRelative <= -1) {
+      bounceBackMade += 1;
     }
   }
 
@@ -495,14 +643,34 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
     parSaveOpportunities,
     parSaveRate: parSaveOpportunities > 0 ? roundToOneDecimal((parSaves / parSaveOpportunities) * 100) : null,
     lostStrokeHoles,
+    strokesPerHole: completedHoles > 0 ? roundToOneDecimal(totalStrokes / completedHoles) : null,
+    puttsPerGir: girPuttHoles > 0 ? roundToOneDecimal(girPutts / girPuttHoles) : null,
+    birdieOrBetterRate: completedHoles > 0 ? roundToOneDecimal((birdieOrBetter / completedHoles) * 100) : null,
+    bogeyAvoidance: completedHoles > 0 ? roundToOneDecimal((parOrBetter / completedHoles) * 100) : null,
+    bounceBackRate: bounceBackChances > 0 ? roundToOneDecimal((bounceBackMade / bounceBackChances) * 100) : null,
+    par3Average: par3Holes > 0 ? roundToOneDecimal(par3Strokes / par3Holes) : null,
+    par4Average: par4Holes > 0 ? roundToOneDecimal(par4Strokes / par4Holes) : null,
+    par5Average: par5Holes > 0 ? roundToOneDecimal(par5Strokes / par5Holes) : null,
+    penaltyStrokes,
+    onePuttRate: puttCount > 0 ? roundToOneDecimal((onePuttCount / puttCount) * 100) : null,
+    threePuttRate: puttCount > 0 ? roundToOneDecimal((threePuttCount / puttCount) * 100) : null,
+    frontHoles,
+    backHoles,
   };
 }
 
 type MutableScoreTypeCounts = { -readonly [K in keyof ScoreTypeCounts]: number };
 
-function cellViewForScore(playerId: string, holeNumber: number, par: number, score: ScorecardHoleScore | undefined): ScorecardCellView {
+function cellViewForScore(
+  playerId: string,
+  holeNumber: number,
+  par: number,
+  score: ScorecardHoleScore | undefined,
+  penalty: HolePenaltyMark | undefined,
+): ScorecardCellView {
+  const badge = penaltyBadgeText(penalty);
   if (!score) {
-    return { playerId, holeNumber, main: '—', sub: '' };
+    return { playerId, holeNumber, main: '—', sub: '', badge };
   }
 
   const relative = score.strokes - par;
@@ -511,6 +679,7 @@ function cellViewForScore(playerId: string, holeNumber: number, par: number, sco
     holeNumber,
     main: relativeScoreLabel(relative),
     sub: score.entryMode === 'manual' ? '' : `온 ${score.onGreenShots ?? 0} · 펏 ${score.putts ?? 0}`,
+    badge,
   };
 }
 
@@ -544,8 +713,12 @@ function ensureHoles(holes: readonly ScorecardHole[], holeCount: number, players
       holeNumber,
       par: normalizeHolePar(stored.par),
       memo: stored.memo,
-      scores: stored.scores.filter((score) => activePlayerIds.has(score.playerId)).map((score) => normalizeStoredScore(score)),
       penalties: (stored.penalties ?? []).filter((penalty) => activePlayerIds.has(penalty.playerId)).map((penalty) => ({ ...penalty })),
+      scores: stored.scores.filter((score) => activePlayerIds.has(score.playerId)).map((score) => {
+        const normalized = normalizeStoredScore(score);
+        const penalty = (stored.penalties ?? []).find((mark) => mark.playerId === normalized.playerId);
+        return scoreWithPenalty(normalized, penaltyStrokeCount(penalty));
+      }),
     };
   });
 }
@@ -604,8 +777,10 @@ function normalizeStoredScore(value: unknown): ScorecardHoleScore {
   const entryMode = value.entryMode === 'hio' || value.entryMode === 'manual' || value.entryMode === 'on-putt' ? value.entryMode : 'manual';
   const strokes = clampInteger(typeof value.strokes === 'number' ? value.strokes : 1, 1, maximumScorecardStrokes);
 
+  const includedPenaltyStrokes = readIncludedPenalty(value);
+
   if (entryMode === 'hio') {
-    return { playerId, strokes: 1, entryMode: 'hio', onGreenShots: 1, putts: 0, holeInOne: true };
+    return { playerId, strokes: 1, entryMode: 'hio', onGreenShots: 1, putts: 0, holeInOne: true, ...(includedPenaltyStrokes === undefined ? {} : { includedPenaltyStrokes }) };
   }
 
   if (entryMode === 'on-putt') {
@@ -618,10 +793,11 @@ function normalizeStoredScore(value: unknown): ScorecardHoleScore {
       onGreenShots,
       putts,
       puttsAssumed: value.puttsAssumed === true,
+      ...(includedPenaltyStrokes === undefined ? {} : { includedPenaltyStrokes }),
     };
   }
 
-  return { playerId, strokes, entryMode: 'manual' };
+  return { playerId, strokes, entryMode: 'manual', ...(includedPenaltyStrokes === undefined ? {} : { includedPenaltyStrokes }) };
 }
 
 function normalizeScoreInput(playerId: string, score: ScorecardHoleScoreInput): ScorecardHoleScore {
@@ -655,8 +831,39 @@ function sortPenalties(players: readonly ScorecardPlayer[]) {
   return (left: HolePenaltyMark, right: HolePenaltyMark) => (order.get(left.playerId) ?? 99) - (order.get(right.playerId) ?? 99);
 }
 
-function penaltyLabel(penalty: HolePenaltyMark): string {
-  return [penalty.ob ? 'OB' : '', penalty.hazard ? '해저드' : ''].filter(Boolean).join('·');
+function penaltyParts(mark: Pick<HolePenaltyMark, 'ob' | 'hazard'> | undefined): readonly { readonly label: string; readonly strokes: number }[] {
+  if (!mark) {
+    return [];
+  }
+  return [
+    mark.ob ? { label: 'OB', strokes: obPenaltyStrokes } : null,
+    mark.hazard ? { label: '해저드', strokes: hazardPenaltyStrokes } : null,
+  ].filter((part): part is { readonly label: string; readonly strokes: number } => part !== null);
+}
+
+function scoreWithPenalty(score: ScorecardHoleScore, penaltyStrokes: number): ScorecardHoleScore {
+  const extra = clampInteger(penaltyStrokes, 0, obPenaltyStrokes + hazardPenaltyStrokes);
+  if ((score.entryMode === 'on-putt' || score.entryMode === 'hio') && typeof score.onGreenShots === 'number' && typeof score.putts === 'number') {
+    return {
+      ...score,
+      strokes: clampInteger(score.onGreenShots + score.putts + extra, 1, maximumScorecardStrokes),
+      includedPenaltyStrokes: extra,
+    };
+  }
+
+  const already = typeof score.includedPenaltyStrokes === 'number' ? score.includedPenaltyStrokes : 0;
+  return {
+    ...score,
+    strokes: clampInteger(score.strokes - already + extra, 1, maximumScorecardStrokes),
+    includedPenaltyStrokes: extra,
+  };
+}
+
+function readIncludedPenalty(value: Record<string, unknown>): number | undefined {
+  if (typeof value.includedPenaltyStrokes !== 'number' || !Number.isFinite(value.includedPenaltyStrokes)) {
+    return undefined;
+  }
+  return clampInteger(value.includedPenaltyStrokes, 0, obPenaltyStrokes + hazardPenaltyStrokes);
 }
 
 function normalizePenalties(value: unknown, playerIds: readonly string[]): readonly HolePenaltyMark[] | null {

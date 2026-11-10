@@ -92,14 +92,6 @@ export function useScorecardController({ round, session }: ScorecardControllerOp
     }
     const quick = quickScoreForPar(parForHole(holeNumber), kind);
     session.updateHoleScore(holeNumber, activePlayer.id, onPuttScoreInput(quick.onGreenShots, quick.putts, false));
-    const next = nextEntryTarget({
-      holeNumber,
-      holeCount: round.settings.holeCount,
-      playerIndex: activePlayerIndex,
-      playerCount: round.players.length,
-    });
-    setActivePlayerIndex(next.playerIndex);
-    setCurrentHoleDraft(next.holeNumber.toString());
   }
 
   function updateHoleInOne(playerId: string) {

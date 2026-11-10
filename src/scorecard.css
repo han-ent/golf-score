@@ -71,7 +71,7 @@ button.scorecard-cell {
   display: grid;
   place-items: center;
   align-content: center;
-  gap: 2px;
+  gap: var(--space-1);
   padding: var(--space-1);
 }
 
@@ -122,6 +122,14 @@ button.scorecard-cell {
   background: var(--green-soft);
   box-shadow: inset 0 0 0 1.5px var(--green);
   color: #141414;
+}
+
+.score-cell.has-penalty {
+  box-shadow: inset 3px 0 0 var(--brass);
+}
+
+.score-cell.active.has-penalty {
+  box-shadow: inset 0 0 0 1.5px var(--green), inset 3px 0 0 var(--brass);
 }
 
 .scorecard-header-row .scorecard-row-label,
