@@ -1,9 +1,14 @@
 import { createPortal } from 'react-dom';
+import type { CSSProperties } from 'react';
 
+import { ScorecardNineGrid } from './ScorecardGrid';
 import { StatList } from './StatList';
 import { buildScorecardView, displayPlayerName, relativeScoreLabel, type ScorecardRound } from './domain/scorecard';
-import { formatFinishedRoundWhen, type FinishedRoundRecord } from './domain/scorecardHistory';
+import { formatFinishedRoundWhen, formatPenaltyHoleSummary, type FinishedRoundRecord } from './domain/scorecardHistory';
 import { reviewStatsFor } from './domain/reviewStats';
+
+const playerTones = ['#1e3d32', '#8d7344', '#3e5c4e', '#6d5a38'] as const;
+const penaltyLinePattern = /^(?:(.+?)\s+)?(OB|해저드)\s+(\d+)회\s*$/;
 
 type HistoryRoundSheetProps = {
   readonly record: FinishedRoundRecord;
@@ -15,9 +20,13 @@ export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundShe
   const title = record.courseName.trim() || record.roundName.trim() || '지난 라운드';
   const card = record.card;
   const view = card ? buildScorecardView(card) : null;
+  const frontHoles = view ? view.holes.filter((hole) => hole.holeNumber <= 9).map((hole) => hole.holeNumber) : [];
+  const backHoles = view ? view.holes.filter((hole) => hole.holeNumber >= 10).map((hole) => hole.holeNumber) : [];
+  const penaltySummary = card ? formatPenaltyHoleSummary(card) : '';
+  const notes = card ? freeformMemos(card) : [];
   const sheet = (
     <div className="sheet-backdrop">
-      <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="history-view-title">
+      <div className="sheet history-sheet" role="dialog" aria-modal="true" aria-labelledby="history-view-title">
         <div className="history-viewer-bar">
           <h2 id="history-view-title" className="clip">{title}</h2>
           <button className="text-button" type="button" onClick={onClose}>닫기</button>
@@ -39,20 +48,57 @@ export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundShe
               </div>
             ))}
           </div>
-          {view ? view.holes.map((hole) => (
-            <article className="history-hole" key={hole.holeNumber}>
-              <div className="stat-line">
-                <strong>{hole.holeNumber}번 홀</strong>
-                <span>파 {hole.par}</span>
+          {view && card ? (
+            <div className="history-scorecard">
+              {frontHoles.length ? (
+                <section>
+                  <p className="detail-label">전반</p>
+                  <ScorecardNineGrid
+                    holeNumbers={frontHoles}
+                    players={view.players}
+                    roundView={view}
+                    displayPlayerName={(player, index) => playerName(record, card, player.id, index)}
+                    playerStyle={playerStyle}
+                    subtotalLabel="OUT"
+                    ariaLabel="전반 스코어카드"
+                  />
+                </section>
+              ) : null}
+              {backHoles.length ? (
+                <section>
+                  <p className="detail-label">후반</p>
+                  <ScorecardNineGrid
+                    holeNumbers={backHoles}
+                    players={view.players}
+                    roundView={view}
+                    displayPlayerName={(player, index) => playerName(record, card, player.id, index)}
+                    playerStyle={playerStyle}
+                    subtotalLabel="IN"
+                    ariaLabel="후반 스코어카드"
+                  />
+                </section>
+              ) : null}
+              <div className="history-grand-total">
+                {view.players.map((player, index) => {
+                  const review = view.reviews[index];
+                  const out = nineTotal(view, frontHoles, player.id);
+                  const inn = nineTotal(view, backHoles, player.id);
+                  const total = review?.completedHoles ? `${review.totalStrokes}타 ${relativeScoreLabel(review.totalRelative)}` : '—';
+                  return (
+                    <p key={player.id}>
+                      {playerName(record, card, player.id, index)} OUT {out}{backHoles.length ? ` · IN ${inn}` : ''} · 합계 {total}
+                    </p>
+                  );
+                })}
               </div>
-              {hole.cells.map((cell, index) => (
-                <p key={cell.playerId}>
-                  {playerName(record, card, cell.playerId, index)} {cell.main} {cell.sub} {cell.badge}
-                </p>
-              ))}
-              {hole.memo.trim() ? <p>{hole.memo.trim()}</p> : null}
-            </article>
-          )) : <p className="history-meta">이 기록은 합계만 남아 있습니다. 홀별 온·퍼트는 이후에 마친 라운드부터 볼 수 있습니다.</p>}
+              {penaltySummary ? <p className="history-meta">{penaltySummary}</p> : null}
+              {notes.length ? (
+                <div>
+                  {notes.map((note) => <p className="history-meta" key={note.holeNumber}>{note.holeNumber}번 {note.text}</p>)}
+                </div>
+              ) : null}
+            </div>
+          ) : <p className="history-meta">이 기록은 합계만 남아 있습니다. 홀별 온·퍼트는 이후에 마친 라운드부터 볼 수 있습니다.</p>}
           {view ? (
             <div>
               <h3>라운드 리뷰</h3>
@@ -83,6 +129,10 @@ export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundShe
   return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body);
 }
 
+function playerStyle(index: number): CSSProperties {
+  return { '--player-tone': playerTones[index % playerTones.length] } as CSSProperties;
+}
+
 function playerName(record: FinishedRoundRecord, card: ScorecardRound | undefined, playerId: string, index: number): string {
   const saved = record.players.find((player) => player.playerId === playerId);
   if (saved?.playerName.trim()) {
@@ -90,4 +140,26 @@ function playerName(record: FinishedRoundRecord, card: ScorecardRound | undefine
   }
   const player = card?.players[index];
   return player ? displayPlayerName(player, index) : `${index + 1}번`;
+}
+
+function nineTotal(view: ReturnType<typeof buildScorecardView>, holeNumbers: readonly number[], playerId: string): string {
+  let sum = 0;
+  let any = false;
+  for (const holeNumber of holeNumbers) {
+    const hole = view.holes.find((candidate) => candidate.holeNumber === holeNumber);
+    const cell = hole?.cells.find((candidate) => candidate.playerId === playerId);
+    if (!hole || !cell || cell.main === '—' || cell.main === '') continue;
+    const relative = Number(cell.main);
+    if (!Number.isFinite(relative)) continue;
+    sum += hole.par + relative;
+    any = true;
+  }
+  return any ? `${sum}` : '—';
+}
+
+function freeformMemos(card: ScorecardRound): readonly { readonly holeNumber: number; readonly text: string }[] {
+  return card.holes.flatMap((hole) => {
+    const text = hole.memo.split('\n').map((line) => line.trim()).filter((line) => line && !penaltyLinePattern.test(line)).join(' ');
+    return text ? [{ holeNumber: hole.holeNumber, text }] : [];
+  });
 }

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
-import { applyHoleScoreMutation, buildScorecardView, createDefaultScorecardRound } from './scorecard';
+import { applyHolePenaltyMutation, applyHoleScoreMutation, buildScorecardView, createDefaultScorecardRound } from './scorecard';
 import type { StorageLike } from './scorecardStorage';
-import { appendScorecardHistory, clearScorecardHistory, compareStats, createFinishedRoundRecord, firstPlayerPeers, loadScorecardHistory, removeScorecardHistoryRecord, statValueFromHistory, summarizeScorecardHistory } from './scorecardHistory';
+import { appendScorecardHistory, clearScorecardHistory, compareStats, createFinishedRoundRecord, firstPlayerPeers, formatPenaltyHoleSummary, loadScorecardHistory, removeScorecardHistoryRecord, removeScorecardHistoryRecords, statValueFromHistory, summarizeScorecardHistory } from './scorecardHistory';
 import { scorecardActiveRoundStorageKey } from './scorecardStorage';
 import { reviewStatsFor } from './reviewStats';
 
@@ -82,4 +82,44 @@ describe('scorecard history', () => {
     expect(loadScorecardHistory(storage)).toEqual([]);
     expect(storage.getItem(scorecardActiveRoundStorageKey)).toBe('active-round-must-stay');
   });
+
+  it('deletes only the selected history rows and leaves the active round key untouched', () => {
+    const storage = new MemoryStorage();
+    storage.setItem(scorecardActiveRoundStorageKey, 'active-round-must-stay');
+    const first = finished('남', '2026-09-01T00:00:00.000Z');
+    const second = finished('동', '2026-09-02T00:00:00.000Z');
+    const third = finished('서', '2026-09-03T00:00:00.000Z');
+    expect(appendScorecardHistory(storage, first)).toBe(true);
+    expect(appendScorecardHistory(storage, second)).toBe(true);
+    expect(appendScorecardHistory(storage, third)).toBe(true);
+    const writes: string[] = [];
+    const watching = {
+      getItem: (key: string) => storage.getItem(key),
+      setItem: (key: string, value: string) => {
+        writes.push(key);
+        storage.setItem(key, value);
+      },
+      removeItem: (key: string) => storage.removeItem(key),
+    };
+    const left = removeScorecardHistoryRecords(watching, [first.id, third.id]);
+    expect(left?.map((record) => record.id)).toEqual([second.id]);
+    expect(writes).toEqual(['fungolf-scorecard:history:v1']);
+    expect(storage.getItem(scorecardActiveRoundStorageKey)).toBe('active-round-must-stay');
+    expect(removeScorecardHistoryRecord(storage, second.id)).toEqual([]);
+  });
+
+  it('summarizes OB and hazard counts once, with the hole numbers', () => {
+    let round = createDefaultScorecardRound({ now: '2026-09-04T00:00:00.000Z' });
+    round = { ...round, players: [{ id: 'player-1', name: '나ㅎ' }] };
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 4, putts: 2 });
+    round = applyHolePenaltyMutation(round, 1, 'player-1', 'ob', 1);
+    expect(formatPenaltyHoleSummary(round)).toBe('OB 1회 (1번)');
+  });
 });
+
+function finished(courseName: string, finishedAt: string) {
+  let round = createDefaultScorecardRound({ now: finishedAt });
+  round = { ...round, courseName };
+  round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2 });
+  return createFinishedRoundRecord(round, finishedAt)!;
+}

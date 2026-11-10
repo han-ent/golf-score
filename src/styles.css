@@ -348,7 +348,10 @@ h1, h2, h3, p { margin: 0; }
   border-radius: var(--radius);
   background: var(--surface);
   color: var(--ink);
+  font-size: 16px;
+  scroll-margin: 96px;
 }
+.primary-button.is-disabled { opacity: 0.42; }
 .memo-card textarea { min-height: 96px; line-height: 1.5; resize: vertical; white-space: pre-wrap; overflow-wrap: anywhere; }
 .danger { color: var(--danger); }
 
@@ -411,6 +414,92 @@ button.history-round {
   font-weight: 550;
   text-align: left;
   white-space: normal;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+button.history-round.selecting {
+  grid-template-columns: 24px minmax(0, 1fr);
+  column-gap: var(--space-2);
+  align-items: start;
+}
+.history-round-body {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.history-check {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin-top: var(--space-1);
+  border: 1px solid var(--green);
+  border-radius: 6px;
+  color: var(--ivory);
+  font-size: 14px;
+  font-weight: 700;
+}
+.history-check.checked { background: var(--green); }
+.history-select-bar {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  background: var(--green-soft);
+}
+.history-select-bar p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 700;
+}
+.history-select-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.history-select-actions button {
+  width: 100%;
+  height: 40px;
+  min-height: 40px;
+  padding: 0 var(--space-1);
+  font-size: 13px;
+}
+.history-select-actions .danger-button {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--ivory);
+}
+.history-list,
+.history-card ol {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.history-scorecard {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+.history-scorecard .scorecard-scroll {
+  margin: 0;
+}
+.history-scorecard .scorecard-subtotal { display: block; }
+.history-grand-total {
+  display: grid;
+  gap: var(--space-1);
+}
+.history-grand-total p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+@media (min-width: 800px) {
+  .history-sheet { width: min(100%, 960px); }
 }
 .history-when,
 .history-meta,
@@ -601,16 +690,27 @@ button.stat-line {
   padding: var(--space-5);
 }
 .sheet {
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  overscroll-behavior: contain;
 }
+.sheet > h2,
+.history-viewer-bar,
+.sheet-actions {
+  position: sticky;
+  z-index: 2;
+  background: var(--surface);
+}
+.sheet > h2,
+.history-viewer-bar { top: 0; }
+.sheet-actions { bottom: 0; }
 .sheet-body {
   display: grid;
   gap: var(--space-4);
   min-width: 0;
-  min-height: 0;
-  overflow: auto;
-  overscroll-behavior: contain;
+  flex: 1 0 auto;
+  overflow: visible;
 }
 .confirm-dialog {
   overflow: auto;

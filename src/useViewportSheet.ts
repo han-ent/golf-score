@@ -18,27 +18,34 @@ export function useViewportSheet(open: boolean) {
       overflow: body.style.overflow,
     };
 
-    const apply = () => {
+    const place = () => {
       const viewport = window.visualViewport;
       root.style.setProperty('--vv-top', `${viewport?.offsetTop ?? 0}px`);
       root.style.setProperty('--vv-left', `${viewport?.offsetLeft ?? 0}px`);
       root.style.setProperty('--vv-width', `${viewport?.width ?? window.innerWidth}px`);
       root.style.setProperty('--vv-height', `${viewport?.height ?? window.innerHeight}px`);
     };
+    const onResize = () => {
+      place();
+      revealFocusedSheetField();
+    };
+    const onScroll = () => {
+      place();
+    };
 
-    apply();
+    place();
     body.style.position = 'fixed';
     body.style.top = `-${scrollY}px`;
     body.style.left = '0';
     body.style.right = '0';
     body.style.width = '100%';
     body.style.overflow = 'hidden';
-    window.visualViewport?.addEventListener('resize', apply);
-    window.visualViewport?.addEventListener('scroll', apply);
+    window.visualViewport?.addEventListener('resize', onResize);
+    window.visualViewport?.addEventListener('scroll', onScroll);
 
     return () => {
-      window.visualViewport?.removeEventListener('resize', apply);
-      window.visualViewport?.removeEventListener('scroll', apply);
+      window.visualViewport?.removeEventListener('resize', onResize);
+      window.visualViewport?.removeEventListener('scroll', onScroll);
       body.style.position = previous.position;
       body.style.top = previous.top;
       body.style.left = previous.left;
@@ -52,4 +59,18 @@ export function useViewportSheet(open: boolean) {
       window.scrollTo(0, scrollY);
     };
   }, [open]);
+}
+
+function revealFocusedSheetField() {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return;
+  if (!active.closest('.sheet, .confirm-dialog')) return;
+  const scroller = active.closest('.sheet, .confirm-dialog');
+  if (!(scroller instanceof HTMLElement)) return;
+  const scrollerBox = scroller.getBoundingClientRect();
+  const fieldBox = active.getBoundingClientRect();
+  const hidden = scrollerBox.height === 0 || fieldBox.bottom < scrollerBox.top || fieldBox.top > scrollerBox.bottom;
+  if (hidden) {
+    active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }
 }

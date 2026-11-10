@@ -1,4 +1,4 @@
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 
 import { scorecardPlayerLabel, type ScorecardPlayer, type ScorecardRoundView } from './domain/scorecard';
 import './scorecard.css';
@@ -48,6 +48,18 @@ type ScorecardGridProps = {
   readonly onSelectHole: (holeNumber: number) => void;
 };
 
+type ScorecardNineGridProps = {
+  readonly holeNumbers: readonly number[];
+  readonly players: readonly ScorecardPlayer[];
+  readonly roundView: ScorecardRoundView;
+  readonly displayPlayerName: (player: ScorecardPlayer, index: number) => string;
+  readonly playerStyle: (index: number) => CSSProperties;
+  readonly subtotalLabel: string;
+  readonly selectedHoleNumber?: number;
+  readonly onSelectHole?: (holeNumber: number) => void;
+  readonly ariaLabel?: string;
+};
+
 export function ScorecardGrid({
   activeNine,
   holeCount,
@@ -59,14 +71,10 @@ export function ScorecardGrid({
   playerStyle,
   onSelectHole,
 }: ScorecardGridProps) {
-  const compact = useCompactScorecard();
-  function holeView(holeNumber: number) {
-    return roundView.holes.find((hole) => hole.holeNumber === holeNumber);
-  }
   const subtotalLabel = activeNine === 'front' ? 'OUT' : 'IN';
 
   return (
-    <section className={compact ? 'scorecard-section compact' : 'scorecard-section'} aria-labelledby="scorecard-title">
+    <section className="scorecard-section" aria-labelledby="scorecard-title">
       <div className="section-heading compact-heading">
         <h2 id="scorecard-title">스코어카드</h2>
         <div className="scorecard-tabs" role="tablist" aria-label="전반 후반 선택">
@@ -85,69 +93,112 @@ export function ScorecardGrid({
           </button>
         </div>
       </div>
+      <ScorecardNineGrid
+        holeNumbers={visibleHoleNumbers}
+        players={players}
+        roundView={roundView}
+        displayPlayerName={displayPlayerName}
+        playerStyle={playerStyle}
+        subtotalLabel={subtotalLabel}
+        selectedHoleNumber={selectedHoleNumber}
+        onSelectHole={onSelectHole}
+      />
+    </section>
+  );
+}
 
-      <div className="scorecard-scroll" aria-label="스코어카드" tabIndex={0}>
-        <div className="scorecard-matrix">
-          <div className="scorecard-row scorecard-header-row">
-            <span className="scorecard-row-label">홀</span>
-            {visibleHoleNumbers.map((scorecardHoleNumber) => (
-              <button
-                className={scorecardHoleNumber === selectedHoleNumber ? 'scorecard-cell header-cell active' : 'scorecard-cell header-cell'}
-                key={`header-${scorecardHoleNumber}`}
-                type="button"
-                onClick={() => onSelectHole(scorecardHoleNumber)}
-              >
-                {scorecardHoleNumber}
-              </button>
-            ))}
-          </div>
-          <div className="scorecard-row scorecard-par-row">
-            <span className="scorecard-row-label">파</span>
-            {visibleHoleNumbers.map((scorecardHoleNumber) => (
-              <button
-                className={scorecardHoleNumber === selectedHoleNumber ? 'scorecard-cell par-cell active' : 'scorecard-cell par-cell'}
-                key={`par-${scorecardHoleNumber}`}
-                type="button"
-                onClick={() => onSelectHole(scorecardHoleNumber)}
-              >
-                <span className="sr-only">{scorecardHoleNumber}번 홀 파</span>
-                {holeView(scorecardHoleNumber)?.par ?? 4}
-              </button>
-            ))}
-          </div>
-          {players.map((player, playerIndex) => (
-            <div className="scorecard-player-block" key={`scorecard-row-${player.id}`}>
+export function ScorecardNineGrid({
+  holeNumbers,
+  players,
+  roundView,
+  displayPlayerName,
+  playerStyle,
+  subtotalLabel,
+  selectedHoleNumber,
+  onSelectHole,
+  ariaLabel = '스코어카드',
+}: ScorecardNineGridProps) {
+  const compact = useCompactScorecard();
+  function holeView(holeNumber: number) {
+    return roundView.holes.find((hole) => hole.holeNumber === holeNumber);
+  }
+
+  return (
+    <div className="scorecard-scroll" aria-label={ariaLabel} tabIndex={onSelectHole ? 0 : undefined}>
+      <div className="scorecard-matrix">
+        <div className="scorecard-row scorecard-header-row">
+          <span className="scorecard-row-label">홀</span>
+          {holeNumbers.map((scorecardHoleNumber) => (
+            <GridCell
+              className={scorecardHoleNumber === selectedHoleNumber ? 'scorecard-cell header-cell active' : 'scorecard-cell header-cell'}
+              key={`header-${scorecardHoleNumber}`}
+              onSelect={onSelectHole ? () => onSelectHole(scorecardHoleNumber) : undefined}
+            >
+              {scorecardHoleNumber}
+            </GridCell>
+          ))}
+        </div>
+        <div className="scorecard-row scorecard-par-row">
+          <span className="scorecard-row-label">파</span>
+          {holeNumbers.map((scorecardHoleNumber) => (
+            <GridCell
+              className={scorecardHoleNumber === selectedHoleNumber ? 'scorecard-cell par-cell active' : 'scorecard-cell par-cell'}
+              key={`par-${scorecardHoleNumber}`}
+              onSelect={onSelectHole ? () => onSelectHole(scorecardHoleNumber) : undefined}
+            >
+              <span className="sr-only">{scorecardHoleNumber}번 홀 파</span>
+              {holeView(scorecardHoleNumber)?.par ?? 4}
+            </GridCell>
+          ))}
+        </div>
+        {players.map((player, playerIndex) => (
+          <div className="scorecard-player-block" key={`scorecard-row-${player.id}`}>
             <div className="scorecard-row player-scorecard-row">
               <span className="scorecard-row-label player-label" style={playerStyle(playerIndex)} title={displayPlayerName(player, playerIndex)}>
                 <span className="clip">{compact ? abbreviatePlayer(player, playerIndex) : scorecardPlayerLabel(player, playerIndex)}</span>
               </span>
-              {visibleHoleNumbers.map((scorecardHoleNumber) => {
+              {holeNumbers.map((scorecardHoleNumber) => {
                 const cell = holeView(scorecardHoleNumber)?.cells.find((candidate) => candidate.playerId === player.id);
                 const parts = (cell?.sub ?? '').split(' · ').filter(Boolean);
-
                 const penaltyClass = cell?.badge ? ' has-penalty' : '';
                 const activeClass = scorecardHoleNumber === selectedHoleNumber ? ' active' : '';
                 return (
-                  <button
+                  <GridCell
                     className={`scorecard-cell score-cell${activeClass}${penaltyClass}`}
                     key={`${player.id}-${scorecardHoleNumber}`}
-                    type="button"
-                    onClick={() => onSelectHole(scorecardHoleNumber)}
-                    aria-label={`${displayPlayerName(player, playerIndex)} ${scorecardHoleNumber}번 홀 ${cell?.main ?? '미입력'} ${cell?.sub ?? ''} ${cell?.badge ?? ''}`.trim()}
+                    onSelect={onSelectHole ? () => onSelectHole(scorecardHoleNumber) : undefined}
+                    ariaLabel={`${displayPlayerName(player, playerIndex)} ${scorecardHoleNumber}번 홀 ${cell?.main ?? '미입력'} ${cell?.sub ?? ''} ${cell?.badge ?? ''}`.trim()}
                   >
                     <strong>{cell?.main ?? '—'}</strong>
                     <span className="score-sub">
                       {parts.length ? parts.map((part) => <em key={part}>{part}</em>) : <em aria-hidden="true"> </em>}
                     </span>
-                  </button>
+                    {cell?.badge ? <span className="score-marker" aria-hidden="true" /> : null}
+                  </GridCell>
                 );
               })}
             </div>
-            <p className="scorecard-subtotal">{compact ? abbreviatePlayer(player, playerIndex) : scorecardPlayerLabel(player, playerIndex)} {subtotalLabel} {nineStrokes(roundView, visibleHoleNumbers, player.id)}</p>
-            </div>
-          ))}
-        </div>
+            <p className="scorecard-subtotal">{compact ? abbreviatePlayer(player, playerIndex) : scorecardPlayerLabel(player, playerIndex)} {subtotalLabel} {nineStrokes(roundView, holeNumbers, player.id)}</p>
+          </div>
+        ))}
       </div>
-    </section>
+    </div>
   );
+}
+
+function GridCell({
+  className,
+  onSelect,
+  ariaLabel,
+  children,
+}: {
+  readonly className: string;
+  readonly onSelect?: () => void;
+  readonly ariaLabel?: string;
+  readonly children: ReactNode;
+}) {
+  if (!onSelect) {
+    return <div className={`${className} static`} aria-label={ariaLabel}>{children}</div>;
+  }
+  return <button className={className} type="button" aria-label={ariaLabel} onClick={onSelect}>{children}</button>;
 }

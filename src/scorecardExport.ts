@@ -26,7 +26,20 @@ const clusterGap = 8;
 const rowHeight = 64;
 const rowGap = 4;
 const sectionGap = 32;
+const headerFont = 24;
+const headerToBox = 12;
+const boxPadding = 24;
+const lineHeight = 32;
+const textAscent = 14;
+const textDescent = 4;
+const cardGap = 16;
 export const scorecardExportPixelRatio = 2;
+export function exportTextBoxHeight(lineCount: number): number {
+  if (lineCount <= 0) {
+    return boxPadding * 2;
+  }
+  return boxPadding + textAscent + (lineCount - 1) * lineHeight + textDescent + boxPadding;
+}
 const svgNamespace = 'http' + '://www.w3.org/2000/svg';
 const pngMimeType = 'image/png';
 const ivory = '#f3efe6';
@@ -58,16 +71,20 @@ export function createScorecardExportSvg(input: ScorecardExportInput): string {
   y += totals.height + sectionGap;
 
   const review = renderReview(input.view, y, width);
-  parts.push(review.markup);
-  y += review.height;
-
-  const penalties = renderNoteSection('타수를 잃은 홀', penaltyTextLines(input.view), y, width);
-  parts.push(...penalties.markup);
-  y += penalties.height;
-
-  const memos = renderNoteSection('홀 메모', memoTextLines(input.view), y, width);
-  parts.push(...memos.markup);
-  y += memos.height + sectionGap;
+  if (review.markup) {
+    parts.push(review.markup);
+    y += review.height + sectionGap;
+  }
+  const penalties = renderNoteSection('타수를 잃은 홀', penaltyTextLines(input.view), y, width, 'lost');
+  if (penalties.markup) {
+    parts.push(penalties.markup);
+    y += penalties.height + sectionGap;
+  }
+  const memos = renderNoteSection('홀 메모', memoTextLines(input.view), y, width, 'memo');
+  if (memos.markup) {
+    parts.push(memos.markup);
+    y += memos.height + sectionGap;
+  }
 
   return [
     `<svg xmlns="${svgNamespace}" width="${width}" height="${y}" viewBox="0 0 ${width} ${y}" role="img" aria-label="${escapeXml(title)}">`,
@@ -190,17 +207,23 @@ function renderNine(
   ].join('');
 }
 
+type ExportCell = {
+  readonly main: string;
+  readonly sub: string;
+  readonly markers: readonly ('OB' | 'H')[];
+};
+
 function renderRow(label: string, values: readonly string[], subtotal: string, y: number, header: boolean): string {
-  return renderCells(label, values.map((value) => ({ main: value, sub: '' })), subtotal, y, header);
+  return renderCells(label, values.map((value) => ({ main: value, sub: '', markers: [] })), subtotal, y, header);
 }
 
-function renderScoreRow(label: string, values: readonly { readonly main: string; readonly sub: string }[], subtotal: string, y: number): string {
+function renderScoreRow(label: string, values: readonly ExportCell[], subtotal: string, y: number): string {
   return renderCells(label, values, subtotal, y, false);
 }
 
 function renderCells(
   label: string,
-  values: readonly { readonly main: string; readonly sub: string }[],
+  values: readonly ExportCell[],
   subtotal: string,
   y: number,
   header: boolean,
@@ -211,36 +234,87 @@ function renderCells(
   ];
   x += labelWidth + clusterGap;
   values.forEach((value, index) => {
-    cells.push(renderValueCell(value.main, value.sub, x, y, header, false));
+    cells.push(renderValueCell(value, x, y, header, false));
     x += cellWidth + (index === values.length - 1 ? clusterGap : holeGap);
   });
-  cells.push(renderValueCell(subtotal, '', x, y, header, true));
+  cells.push(renderValueCell({ main: subtotal, sub: '', markers: [] }, x, y, header, true));
   return cells.join('');
 }
 
 function renderLabelCell(label: string, x: number, y: number, header: boolean): string {
   const fill = header ? green : paper;
   const color = header ? ivory : ink;
+  const maxWidth = labelWidth - 12;
+  const id = `label-${x}-${y}`;
   return [
     `<rect x="${x}" y="${y}" width="${labelWidth}" height="${rowHeight}" rx="8" fill="${fill}" stroke="${header ? green : line}" stroke-width="1"/>`,
-    centeredText(fitLabel(label, 8), x, y, labelWidth, rowHeight, 16, '700', color),
+    `<defs><clipPath id="${id}"><rect x="${x + 1}" y="${y + 1}" width="${labelWidth - 2}" height="${rowHeight - 2}" rx="7"/></clipPath></defs>`,
+    `<g clip-path="url(#${id})">`,
+    clippedText(fitExportText(label, maxWidth, 16, 12), x, y, labelWidth, rowHeight, '700', color, maxWidth),
+    '</g>',
   ].join('');
 }
 
-function renderValueCell(main: string, sub: string, x: number, y: number, header: boolean, subtotal: boolean): string {
+function renderValueCell(cell: ExportCell, x: number, y: number, header: boolean, subtotal: boolean): string {
   const width = subtotal ? subtotalWidth : cellWidth;
   const fill = header ? green : paper;
   const color = header ? ivory : subtotal ? brass : ink;
-  const caption = subtotal ? '' : sub;
-  return [
+  const showDetail = !header && !subtotal && cell.sub.trim().length > 0;
+  const showMarkers = !header && !subtotal && cell.markers.length > 0;
+  const markerBand = showMarkers ? 16 : 0;
+  const mainTop = y + markerBand;
+  const mainHeight = showDetail ? rowHeight - markerBand - 22 : rowHeight - markerBand;
+  const maxWidth = width - 8;
+  const id = clipId(x, y);
+  const parts = [
     `<rect x="${x}" y="${y}" width="${width}" height="${rowHeight}" rx="8" fill="${fill}" stroke="${header ? green : line}" stroke-width="1"/>`,
-    caption
-      ? [
-        centeredText(main || '—', x, y + 4, width, 32, header ? 20 : 22, '700', color),
-        centeredText(caption, x, y + 32, width, 24, 12, '600', header ? ivory : muted),
-      ].join('')
-      : centeredText(main || '—', x, y, width, rowHeight, header ? 20 : 22, '700', color),
-  ].join('');
+    `<defs><clipPath id="${id}"><rect x="${x + 1}" y="${y + 1}" width="${width - 2}" height="${rowHeight - 2}" rx="7"/></clipPath></defs>`,
+    `<g clip-path="url(#${id})">`,
+  ];
+  if (showMarkers) {
+    parts.push(renderMarkers(cell.markers, x, y, width));
+  }
+  parts.push(clippedText(
+    fitExportText(cell.main || '—', maxWidth, header ? 20 : showDetail ? 18 : 22, 14),
+    x,
+    mainTop,
+    width,
+    mainHeight,
+    '700',
+    color,
+    maxWidth,
+  ));
+  if (showDetail) {
+    parts.push(clippedText(
+      fitExportText(cell.sub, maxWidth, 12, 9),
+      x,
+      y + rowHeight - 22,
+      width,
+      20,
+      '600',
+      muted,
+      maxWidth,
+    ));
+  }
+  parts.push('</g>');
+  return parts.join('');
+}
+
+function clipId(x: number, y: number): string {
+  return `cell-${x}-${y}`;
+}
+
+function renderMarkers(markers: readonly ('OB' | 'H')[], x: number, y: number, width: number): string {
+  let cursor = x + width - 4;
+  const parts: string[] = [];
+  for (const marker of [...markers].reverse()) {
+    const badgeWidth = marker === 'OB' ? 18 : 14;
+    cursor -= badgeWidth;
+    parts.push(`<rect x="${cursor}" y="${y + 3}" width="${badgeWidth}" height="12" rx="4" fill="${brass}"/>`);
+    parts.push(`<text class="cell-marker" x="${cursor + badgeWidth / 2}" y="${y + 12}" text-anchor="middle" font-size="8" font-weight="700" fill="${ivory}">${marker}</text>`);
+    cursor -= 2;
+  }
+  return parts.join('');
 }
 
 function renderTotals(
@@ -248,44 +322,32 @@ function renderTotals(
   nines: readonly (readonly ScorecardHoleView[])[],
   y: number,
 ): { readonly markup: string; readonly height: number } {
-  const lineHeight = 32;
-  const height = 24 + 16 + Math.max(1, view.players.length) * lineHeight;
+  const lineCount = Math.max(1, view.players.length);
+  const height = headerFont + headerToBox + lineCount * lineHeight;
   const lines = view.players.map((player, index) => {
     const review = view.reviews[index];
     const name = displayPlayerName(player, index);
     const out = nines[0] ? sumDefined(nines[0].map((hole) => strokesFor(hole, player.id))) : '—';
     const inn = nines[1] ? sumDefined(nines[1].map((hole) => strokesFor(hole, player.id))) : '—';
     const total = review?.completedHoles ? `${review.totalStrokes}타` : '—';
-    const relative = review?.completedHoles ? relativeScoreLabel(review.totalRelative) : '—';
+    const relative = review?.completedHoles ? exportRelativeLabel(review.totalRelative) : '—';
     const pieces = [`${name}  OUT ${out}`, nines[1] ? `IN ${inn}` : '', `합계 ${total}  ${relative}`].filter(Boolean);
-    return `<text x="${margin}" y="${y + 24 + 16 + lineHeight * index + 22}" font-size="16" font-weight="600" fill="${ink}">${escapeXml(pieces.join('  '))}</text>`;
+    const baseline = y + headerFont + headerToBox + textAscent + index * lineHeight;
+    return `<text x="${margin}" y="${baseline}" font-size="16" font-weight="600" fill="${ink}">${escapeXml(pieces.join('  '))}</text>`;
   });
   return {
     height,
     markup: [
-      `<text x="${margin}" y="${y + 24}" font-size="24" font-weight="700" fill="${green}">합계</text>`,
+      `<text x="${margin}" y="${y + headerFont}" font-size="${headerFont}" font-weight="700" fill="${green}">합계</text>`,
       ...lines,
     ].join(''),
   };
 }
 
 function renderReview(view: ScorecardRoundView, y: number, width: number): { readonly markup: string; readonly height: number } {
-  const cards = view.reviews.map((review, index) => reviewCardLines(view, index));
-  const cardGap = 16;
-  let cursor = y + 24 + 16;
-  const markup = [`<text x="${margin}" y="${y + 24}" font-size="24" font-weight="700" fill="${green}">라운드 리뷰</text>`];
-  cards.forEach((lines) => {
-    const cardHeight = 16 + lines.length * 28;
-    markup.push(`<rect x="${margin}" y="${cursor}" width="${width - margin * 2}" height="${cardHeight}" rx="12" fill="${paper}" stroke="${line}" stroke-width="1"/>`);
-    lines.forEach((line, lineIndex) => {
-      const size = lineIndex === 0 ? 20 : lineIndex === 1 ? 18 : 14;
-      const weight = lineIndex < 2 ? '700' : '600';
-      const color = lineIndex === 0 ? green : ink;
-      markup.push(`<text x="${margin + 16}" y="${cursor + 16 + 22 + lineIndex * 28}" font-size="${size}" font-weight="${weight}" fill="${color}">${escapeXml(line)}</text>`);
-    });
-    cursor += cardHeight + cardGap;
-  });
-  return { markup: markup.join(''), height: cursor - y };
+  const textWidth = width - margin * 2 - boxPadding * 2;
+  const cards = view.reviews.map((review, index) => reviewCardLines(view, index).flatMap((line) => wrapToWidth(line, textWidth, 16)));
+  return renderTextSection('라운드 리뷰', cards, y, width, 'review');
 }
 
 function reviewCardLines(view: ScorecardRoundView, index: number): readonly string[] {
@@ -294,13 +356,13 @@ function reviewCardLines(view: ScorecardRoundView, index: number): readonly stri
   if (!review) {
     return [name, '기록 전'];
   }
-  const score = review.completedHoles ? relativeScoreLabel(review.totalRelative) : '—';
+  const score = review.completedHoles ? exportRelativeLabel(review.totalRelative) : '—';
   const strokes = review.completedHoles ? `${review.totalStrokes}타` : '—';
   const types = visibleScoreTypeCounts(review.scoreTypeCounts).map((entry) => `${entry.label} ${entry.count}`).join(' · ');
   return [
     name,
     `${review.completedHoles}홀 · 총타 ${strokes} · ${score}`,
-    `전반 ${relativeScoreLabel(review.frontRelative)} · 후반 ${relativeScoreLabel(review.backRelative)}`,
+    `전반 ${exportRelativeLabel(review.frontRelative)} · 후반 ${exportRelativeLabel(review.backRelative)}`,
     `온 평균 ${formatStat(review.averageOnGreenShots)} · 펏 평균 ${formatStat(review.averagePutts)}`,
     `파온율 ${formatPercent(review.girRate)} · 스크램블링(파세이브) ${formatPercent(review.parSaveRate)}`,
     `1펏 ${review.onePuttCount}회 · 3펏 ${review.threePuttCount}회`,
@@ -308,28 +370,57 @@ function reviewCardLines(view: ScorecardRoundView, index: number): readonly stri
   ];
 }
 
-function renderNoteSection(title: string, lines: readonly string[], y: number, width: number): { readonly markup: readonly string[]; readonly height: number } {
+function renderNoteSection(
+  title: string,
+  lines: readonly string[],
+  y: number,
+  width: number,
+  section: string,
+): { readonly markup: string; readonly height: number } {
   if (lines.length === 0) {
-    return { markup: [], height: 0 };
+    return { markup: '', height: 0 };
   }
-  const cardHeight = 16 + lines.length * 28;
-  return {
-    height: 24 + 16 + cardHeight + sectionGap,
-    markup: [
-      `<text x="${margin}" y="${y + 24}" font-size="24" font-weight="700" fill="${green}">${escapeXml(title)}</text>`,
-      `<rect x="${margin}" y="${y + 24 + 16}" width="${width - margin * 2}" height="${cardHeight}" rx="12" fill="${paper}" stroke="${line}" stroke-width="1"/>`,
-      ...lines.map((line, index) => `<text x="${margin + 16}" y="${y + 24 + 16 + 28 + index * 28}" font-size="16" font-weight="600" fill="${ink}">${escapeXml(line)}</text>`),
-    ],
-  };
+  const textWidth = width - margin * 2 - boxPadding * 2;
+  const wrapped = lines.flatMap((line) => wrapToWidth(line, textWidth, 16));
+  return renderTextSection(title, [wrapped], y, width, section);
 }
 
-function holeValue(hole: ScorecardHoleView | undefined, playerId: string): { readonly main: string; readonly sub: string } {
+function renderTextSection(
+  title: string,
+  cards: readonly (readonly string[])[],
+  y: number,
+  width: number,
+  section: string,
+): { readonly markup: string; readonly height: number } {
+  const headerBaseline = y + headerFont;
+  let boxTop = headerBaseline + headerToBox;
+  const markup = [`<text x="${margin}" y="${headerBaseline}" font-size="${headerFont}" font-weight="700" fill="${green}">${escapeXml(title)}</text>`];
+  cards.forEach((lines, cardIndex) => {
+    const boxHeight = exportTextBoxHeight(lines.length);
+    markup.push(`<rect data-section="${section}" x="${margin}" y="${boxTop}" width="${width - margin * 2}" height="${boxHeight}" rx="12" fill="${paper}" stroke="${line}" stroke-width="1"/>`);
+    lines.forEach((text, lineIndex) => {
+      const emphasis = section === 'review' && lineIndex < 2;
+      const size = section === 'review' && lineIndex === 0 ? 18 : 16;
+      const baseline = boxTop + boxPadding + textAscent + lineIndex * lineHeight;
+      markup.push(`<text x="${margin + boxPadding}" y="${baseline}" font-size="${size}" font-weight="${emphasis ? '700' : '600'}" fill="${section === 'review' && lineIndex === 0 ? green : ink}">${escapeXml(text)}</text>`);
+    });
+    boxTop += boxHeight;
+    if (cardIndex < cards.length - 1) {
+      boxTop += cardGap;
+    }
+  });
+  return { markup: markup.join(''), height: boxTop - y };
+}
+
+function holeValue(hole: ScorecardHoleView | undefined, playerId: string): ExportCell {
   if (!hole) {
-    return { main: '', sub: '' };
+    return { main: '', sub: '', markers: [] };
   }
   const cell = hole.cells.find((candidate) => candidate.playerId === playerId);
-  const badge = cell?.badge ? ` ${cell.badge}` : '';
-  return { main: cell?.main ?? '—', sub: `${cell?.sub ?? ''}${badge}`.trim() };
+  const markers: ('OB' | 'H')[] = [];
+  if (cell?.badge.includes('OB')) markers.push('OB');
+  if (cell?.badge.includes('해저드')) markers.push('H');
+  return { main: cell?.main ?? '—', sub: cell?.sub?.trim() ?? '', markers };
 }
 
 function strokesFor(hole: ScorecardHoleView | undefined, playerId: string): number | undefined {
@@ -349,9 +440,55 @@ function sumDefined(values: readonly (number | undefined)[]): string {
   return numbers.length > 0 ? `${numbers.reduce((sum, value) => sum + value, 0)}` : '—';
 }
 
-function centeredText(value: string, x: number, y: number, width: number, height: number, fontSize: number, weight: string, fill: string): string {
-  const baseline = y + height / 2 + fontSize * 0.35;
-  return `<text x="${x + width / 2}" y="${baseline.toFixed(1)}" text-anchor="middle" font-size="${fontSize}" font-weight="${weight}" fill="${fill}">${escapeXml(value)}</text>`;
+function clippedText(
+  fitted: { readonly text: string; readonly fontSize: number },
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  weight: string,
+  fill: string,
+  maxWidth: number,
+): string {
+  if (!fitted.text) {
+    return '';
+  }
+  const baseline = y + height / 2 + fitted.fontSize * 0.35;
+  return `<text class="cell-fit" data-max="${maxWidth}" x="${x + width / 2}" y="${baseline.toFixed(1)}" text-anchor="middle" font-size="${fitted.fontSize}" font-weight="${weight}" fill="${fill}">${escapeXml(fitted.text)}</text>`;
+}
+
+export function estimateExportTextWidth(value: string, fontSize: number): number {
+  let width = 0;
+  for (const char of Array.from(value)) {
+    if (char === ' ' || char === '·') {
+      width += fontSize * 0.35;
+    } else if (char.charCodeAt(0) < 128) {
+      width += fontSize * 0.62;
+    } else {
+      width += fontSize;
+    }
+  }
+  return width;
+}
+
+export function fitExportText(value: string, maxWidth: number, maxFont: number, minFont: number): { readonly text: string; readonly fontSize: number } {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return { text: '', fontSize: maxFont };
+  }
+  let fontSize = maxFont;
+  while (fontSize > minFont && estimateExportTextWidth(trimmed, fontSize) > maxWidth) {
+    fontSize -= 1;
+  }
+  if (estimateExportTextWidth(trimmed, fontSize) <= maxWidth) {
+    return { text: trimmed, fontSize };
+  }
+  const characters = Array.from(trimmed);
+  let count = characters.length;
+  while (count > 0 && estimateExportTextWidth(`${characters.slice(0, count).join('')}…`, minFont) > maxWidth) {
+    count -= 1;
+  }
+  return { text: count > 0 ? `${characters.slice(0, count).join('')}…` : '…', fontSize: minFont };
 }
 
 function penaltyTextLines(view: ScorecardRoundView): readonly string[] {
@@ -362,17 +499,27 @@ function penaltyTextLines(view: ScorecardRoundView): readonly string[] {
 }
 
 function memoTextLines(view: ScorecardRoundView): readonly string[] {
-  return view.memoHighlights.flatMap((memo) => wrapText(`${memo.holeNumber}H ${memo.memo}`, 42));
+  return view.memoHighlights.map((memo) => `${memo.holeNumber}H ${memo.memo.replace(/\s*\n\s*/g, ' · ')}`);
 }
 
-function wrapText(value: string, maxLength: number): readonly string[] {
+function wrapToWidth(value: string, maxWidth: number, fontSize: number): readonly string[] {
   const characters = Array.from(value);
-  if (characters.length <= maxLength) {
-    return [value];
+  if (characters.length === 0) {
+    return [];
   }
   const lines: string[] = [];
-  for (let index = 0; index < characters.length; index += maxLength) {
-    lines.push(characters.slice(index, index + maxLength).join(''));
+  let current = '';
+  for (const char of characters) {
+    const next = `${current}${char}`;
+    if (current && estimateExportTextWidth(next, fontSize) > maxWidth) {
+      lines.push(current);
+      current = char.trim() ? char : '';
+    } else {
+      current = next;
+    }
+  }
+  if (current) {
+    lines.push(current);
   }
   return lines;
 }
@@ -382,7 +529,11 @@ function scoreSummaryText(view: ScorecardRoundView): string {
   if (!firstReview || firstReview.completedHoles === 0) {
     return '기록 전';
   }
-  return `${firstReview.completedHoles}홀 ${relativeScoreLabel(firstReview.totalRelative)}`;
+  return `${firstReview.completedHoles}홀 ${exportRelativeLabel(firstReview.totalRelative)}`;
+}
+
+function exportRelativeLabel(relative: number): string {
+  return relative === 0 ? '±0' : relativeScoreLabel(relative);
 }
 
 function formatStat(value: number | null): string {
@@ -391,11 +542,6 @@ function formatStat(value: number | null): string {
 
 function formatPercent(value: number | null): string {
   return value === null ? '—' : `${value}%`;
-}
-
-function fitLabel(value: string, maxLength: number): string {
-  const characters = Array.from(value);
-  return characters.length > maxLength ? `${characters.slice(0, maxLength - 1).join('')}…` : value;
 }
 
 function formatExportTimestamp(value: string): string {

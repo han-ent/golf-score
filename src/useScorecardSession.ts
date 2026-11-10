@@ -19,7 +19,7 @@ import {
   type ScorecardRound,
   type ScorecardRoundSettings,
 } from './domain/scorecard';
-import { appendScorecardHistory, clearScorecardHistory, createFinishedRoundRecord, loadScorecardHistory, removeScorecardHistoryRecord, type FinishedRoundRecord } from './domain/scorecardHistory';
+import { appendScorecardHistory, clearScorecardHistory, createFinishedRoundRecord, loadScorecardHistory, removeScorecardHistoryRecords, type FinishedRoundRecord } from './domain/scorecardHistory';
 import {
   clearScorecardRound,
   createBlankStoredScorecardRound,
@@ -53,6 +53,7 @@ export type ScorecardRoundSession = ScorecardRoundSessionState & {
   readonly clearSavedRound: () => boolean;
   readonly clearHistory: () => boolean;
   readonly deleteHistoryRecord: (recordId: string) => boolean;
+  readonly deleteHistoryRecords: (recordIds: readonly string[]) => boolean;
   readonly finishRound: () => boolean;
 };
 
@@ -182,11 +183,19 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
   }
 
   function deleteHistoryRecord(recordId: string): boolean {
+    return deleteHistoryRecords([recordId]);
+  }
+
+  function deleteHistoryRecords(recordIds: readonly string[]): boolean {
+    if (recordIds.length === 0) {
+      return false;
+    }
     if (!storage) {
-      setState((current) => ({ ...current, history: current.history.filter((record) => record.id !== recordId) }));
+      const drop = new Set(recordIds);
+      setState((current) => ({ ...current, history: current.history.filter((record) => !drop.has(record.id)) }));
       return true;
     }
-    const next = removeScorecardHistoryRecord(storage, recordId);
+    const next = removeScorecardHistoryRecords(storage, recordIds);
     if (!next) {
       return false;
     }
@@ -234,6 +243,7 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     clearSavedRound,
     clearHistory,
     deleteHistoryRecord,
+    deleteHistoryRecords,
     finishRound,
   };
 }
