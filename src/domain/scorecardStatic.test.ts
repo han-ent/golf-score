@@ -69,6 +69,9 @@ describe('simple scorecard static guardrails', () => {
     expect(scorecardCss).toContain('font-size: 12px');
     expect(scorecardCss).toContain('color: #141414');
     expect(scorecardCss).toContain('width: max-content');
+    expect(scorecardCss).toContain('min-width: 0');
+    expect(readRepoFile('src/styles.css')).toContain('--vv-height');
+    expect(readRepoFile('src/styles.css')).toContain('100dvh');
   });
 
   it('keeps layout spacing on the 4/8/12/16/24/32 scale', () => {

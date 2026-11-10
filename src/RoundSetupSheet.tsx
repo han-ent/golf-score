@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom';
+
 import { scorecardPlayerCountOptions, type ScorecardRound } from './domain/scorecard';
 import { isRoundSetupDraftDirty, resizeSetupNames, setupDropsScoredPlayers, type RoundSetupDraft } from './roundSetup';
 
@@ -14,10 +16,11 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
   const dirty = isRoundSetupDraftDirty(draft, round);
   const dropsScores = setupDropsScoredPlayers(draft, round);
 
-  return (
+  const sheet = (
     <div className="sheet-backdrop">
       <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <h2 id="settings-title">라운드 설정</h2>
+        <div className="sheet-body">
         <div className="field-grid">
           <label className="field-card">
             라운드 이름
@@ -66,6 +69,7 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
           ))}
         </div>
         {dropsScores ? <p className="save-state dirty">인원을 줄이면 빠지는 선수의 점수와 벌타도 지워집니다. 저장해야 반영됩니다.</p> : null}
+        </div>
         <div className="sheet-actions">
           <p className={dirty ? 'save-state dirty' : 'save-state'} role="status">
             {dirty ? '저장하지 않은 변경이 있습니다. 닫기는 반영하지 않습니다.' : '변경 없음'}
@@ -77,4 +81,6 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
       </div>
     </div>
   );
+
+  return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body);
 }

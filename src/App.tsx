@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { createPortal } from 'react-dom';
 
 import { RoundSetupSheet } from './RoundSetupSheet';
 import { ScorecardGrid } from './ScorecardGrid';
@@ -18,6 +19,7 @@ import { useFieldPreferences } from './preferences';
 import { createScorecardExportPngBlob, createScorecardExportSvg, downloadScorecardExportPng, scorecardExportFileName, shareScorecardExportPng } from './scorecardExport';
 import { useScorecardController } from './useScorecardController';
 import { useScorecardSession } from './useScorecardSession';
+import { useViewportSheet } from './useViewportSheet';
 import { useWakeLock } from './useWakeLock';
 
 const playerTones = ['#1e3d32', '#8d7344', '#3e5c4e', '#6d5a38'] as const;
@@ -44,6 +46,7 @@ export function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [memoState, setMemoState] = useState<{ readonly hole: number; readonly open: boolean }>({ hole: 1, open: false });
   const [confirmKind, setConfirmKind] = useState<ConfirmKind | null>(null);
+  useViewportSheet(settingsOpen || confirmKind !== null);
   const controller = useScorecardController({ round, session });
   const memoOpen = memoState.hole === controller.holeNumber && memoState.open;
   const activePlayer = controller.activePlayer ?? round.players[0];
@@ -425,7 +428,7 @@ export function App() {
         />
       ) : null}
 
-      {confirmKind ? (
+      {confirmKind ? createPortal(
         <div className="sheet-backdrop">
           <div className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
             <h2 id="confirm-title">{confirmCopy[confirmKind].title}</h2>
@@ -435,7 +438,8 @@ export function App() {
               <button className="primary-button" type="button" onClick={runConfirm}>{confirmCopy[confirmKind].confirm}</button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
     </main>
   );

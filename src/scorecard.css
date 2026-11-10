@@ -1,8 +1,14 @@
 .scorecard-section {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
   overflow: hidden;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .scorecard-scroll {
+  min-width: 0;
+  max-width: 100%;
   overflow-x: auto;
   margin: 0 calc(var(--space-1) * -1);
   padding: 0 var(--space-1) var(--space-2);
@@ -61,6 +67,7 @@
 }
 
 .scorecard-cell {
+  position: relative;
   overflow: hidden;
   border: 1px solid var(--hairline);
   background: var(--surface);
