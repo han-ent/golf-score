@@ -1,4 +1,4 @@
-import { displayPlayerName, relativeScoreLabel, scoreTypeLabel, type ScorecardRoundView } from './domain/scorecard';
+import { displayPlayerName, relativeScoreLabel, visibleScoreTypeCounts, type ScorecardRoundView } from './domain/scorecard';
 
 export type ScorecardExportInput = {
   readonly roundName: string;
@@ -15,63 +15,61 @@ export type ScorecardExportShareResult =
   | { readonly ok: true; readonly method: 'photo-menu' }
   | { readonly ok: false; readonly reason: 'browser-unavailable' | 'share-unavailable' | 'share-cancelled' | 'share-failed' };
 
-const cellWidth = 78;
-const rowHeight = 52;
-const labelWidth = 140;
-const horizontalPadding = 34;
-const topHeaderHeight = 136;
-const reviewSectionTitleHeight = 38;
-const reviewCardHeight = 92;
-const memoSectionTitleHeight = 40;
-const memoRowHeight = 28;
-const memoWrapLength = 82;
-const bottomPadding = 42;
+const columnsPerNine = 9;
+const cellWidth = 72;
+const rowHeight = 112;
+const labelWidth = 96;
+const horizontalPadding = 16;
+const topHeaderHeight = 92;
+const nineGap = 28;
+const reviewLineHeight = 32;
+const bottomPadding = 28;
+export const scorecardExportPixelRatio = 2;
 const svgNamespace = 'http' + '://www.w3.org/2000/svg';
 const pngMimeType = 'image/png';
 
 export function createScorecardExportSvg(input: ScorecardExportInput): string {
-  const width = horizontalPadding * 2 + labelWidth + cellWidth * input.view.holes.length;
-  const scorecardHeight = rowHeight * (2 + input.view.players.length);
-  const reviewHeight = reviewSectionTitleHeight + input.view.reviews.length * reviewCardHeight;
+  const width = horizontalPadding * 2 + labelWidth + cellWidth * columnsPerNine;
+  const nines = nineGroups(input.view.holes);
+  const scorecardHeight = nines.reduce((sum, group) => sum + nineBlockHeight(group.length > 0 ? input.view.players.length : 0), 0) + Math.max(0, nines.length - 1) * nineGap;
+  const reviewLines = reviewTextLines(input.view);
   const memoLines = memoTextLines(input.view);
-  const memoHeight = memoLines.length ? memoSectionTitleHeight + memoLines.length * memoRowHeight : 0;
-  const height = topHeaderHeight + scorecardHeight + reviewHeight + memoHeight + bottomPadding + 30;
-  const title = input.courseName.trim() || input.roundName.trim() || '골프 스코어카드';
-  const subtitle = [input.roundName.trim(), scoreSummaryText(input.view)].filter(Boolean).join(' · ') || '필드 기록 저장용 이미지';
+  const penaltyLines = penaltyTextLines(input.view);
+  const reviewHeight = sectionHeight(reviewLines);
+  const memoHeight = sectionHeight(memoLines);
+  const penaltyHeight = sectionHeight(penaltyLines);
+  const height = topHeaderHeight + scorecardHeight + reviewHeight + penaltyHeight + memoHeight + bottomPadding;
+  const title = truncateLabel(input.courseName.trim() || input.roundName.trim() || 'FunGolf 스코어카드', 16);
+  const subtitle = [input.roundName.trim(), scoreSummaryText(input.view)].filter(Boolean).join(' · ') || '필드 기록';
   const generatedAt = formatExportTimestamp(input.generatedAt);
-  const headerRowY = topHeaderHeight;
-  const parRowY = headerRowY + rowHeight;
-  const playerStartY = parRowY + rowHeight;
-  const reviewStartY = playerStartY + rowHeight * input.view.players.length + 32;
-  const memoStartY = reviewStartY + reviewHeight + (memoLines.length ? 18 : 0);
+
+  let cursorY = topHeaderHeight;
+  const nineMarkup = nines.map((group, index) => {
+    const block = renderNine(group, input.view.players, cursorY, index === 0 ? '전반' : '후반');
+    cursorY += nineBlockHeight(input.view.players.length) + nineGap;
+    return block;
+  });
+  const reviewY = topHeaderHeight + scorecardHeight + 8;
+  const penaltyY = reviewY + reviewHeight;
+  const memoY = penaltyY + penaltyHeight;
 
   return [
     `<svg xmlns="${svgNamespace}" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${escapeXml(title)} 스코어카드">`,
-    '<defs>',
-    '<linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f172a"/><stop offset="1" stop-color="#14532d"/></linearGradient>',
-    '<style><![CDATA[text{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}.label{font-size:16px;font-weight:850;fill:#f8fafc}.small{font-size:13px;font-weight:700;fill:#cbd5e1}.cell-main{font-size:18px;font-weight:950}.cell-sub{font-size:11px;font-weight:750}.memo{font-size:14px;font-weight:700;fill:#e2e8f0}.review-name{font-size:18px;font-weight:900;fill:#ffffff}.review-score{font-size:28px;font-weight:950;fill:#ffffff}.review-line{font-size:14px;font-weight:750;fill:#dbeafe}]]></style>',
-    '</defs>',
-    '<rect width="100%" height="100%" rx="28" fill="url(#bg)"/>',
-    `<text x="${horizontalPadding}" y="58" font-size="30" font-weight="950" fill="#ffffff">${escapeXml(title)}</text>`,
-    `<text x="${horizontalPadding}" y="90" class="small">${escapeXml(subtitle)}</text>`,
-    `<text x="${width - horizontalPadding}" y="58" text-anchor="end" class="small">${escapeXml(generatedAt)}</text>`,
-    renderRow('홀', input.view.holes.map((hole) => ({ main: `${hole.holeNumber}H`, sub: '' })), headerRowY, true),
-    renderRow('파', input.view.holes.map((hole) => ({ main: `${hole.par}`, sub: '' })), parRowY, false),
-    ...input.view.players.map((player, index) =>
-      renderRow(
-        displayPlayerName(player, index),
-        input.view.holes.map((hole) => {
-          const cell = hole.cells.find((candidate) => candidate.playerId === player.id);
-          return { main: cell?.main ?? '—', sub: cell?.sub ?? '' };
-        }),
-        playerStartY + rowHeight * index,
-        false,
-      ),
-    ),
-    ...renderReviewRows(input.view, reviewStartY, width),
-    ...renderMemoRows(memoLines, memoStartY),
+    '<style><![CDATA[text{font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Pretendard","Noto Sans KR",sans-serif}]]></style>',
+    `<rect width="100%" height="100%" fill="#ffffff"/>`,
+    `<text x="${horizontalPadding}" y="40" font-size="28" font-weight="700" fill="#17241f">${escapeXml(title)}</text>`,
+    `<text x="${horizontalPadding}" y="68" font-size="16" font-weight="600" fill="#17241f">${escapeXml(truncateLabel(subtitle, 28))}</text>`,
+    `<text x="${width - horizontalPadding}" y="40" text-anchor="end" font-size="14" font-weight="600" fill="#5c564c">${escapeXml(generatedAt)}</text>`,
+    ...nineMarkup,
+    ...renderWrappedSection('라운드 리뷰', reviewLines, reviewY, width),
+    ...renderWrappedSection('타수를 잃은 홀', penaltyLines, penaltyY, width),
+    ...renderWrappedSection('홀 메모', memoLines, memoY, width),
     '</svg>',
   ].join('');
+}
+
+export function scorecardExportPixelSize(width: number, height: number): { readonly width: number; readonly height: number } {
+  return { width: Math.round(width * scorecardExportPixelRatio), height: Math.round(height * scorecardExportPixelRatio) };
 }
 
 export async function createScorecardExportPngBlob(svg: string): Promise<Blob | null> {
@@ -135,68 +133,118 @@ export function scorecardExportFileName(courseName: string, generatedAt: string)
   return `${baseName}-${dateStamp}.png`;
 }
 
+function sectionHeight(lines: readonly string[]): number {
+  return lines.length ? 52 + lines.length * reviewLineHeight : 0;
+}
+
+function nineBlockHeight(playerCount: number): number {
+  return 24 + rowHeight * (2 + playerCount);
+}
+
+function nineGroups<T>(holes: readonly T[]): readonly (readonly T[])[] {
+  if (holes.length === 0) {
+    return [];
+  }
+  const groups: T[][] = [];
+  for (let index = 0; index < holes.length; index += columnsPerNine) {
+    groups.push(holes.slice(index, index + columnsPerNine));
+  }
+  return groups;
+}
+
+function renderNine(
+  holes: readonly ScorecardRoundView['holes'][number][],
+  players: ScorecardRoundView['players'],
+  y: number,
+  label: string,
+): string {
+  const padded = Array.from({ length: columnsPerNine }, (_, index) => holes[index]);
+  const headerY = y + 24;
+  const parY = headerY + rowHeight;
+  const playerY = parY + rowHeight;
+  return [
+    `<text x="${horizontalPadding}" y="${y + 16}" font-size="14" font-weight="700" fill="#8d7344">${label}</text>`,
+    renderRow('홀', padded.map((hole) => ({ main: hole ? `${hole.holeNumber}` : '', sub: '' })), headerY, true),
+    renderRow('파', padded.map((hole) => ({ main: hole ? `${hole.par}` : '', sub: '' })), parY, false),
+    ...players.map((player, index) =>
+      renderRow(
+        displayPlayerName(player, index),
+        padded.map((hole) => {
+          const cell = hole?.cells.find((candidate) => candidate.playerId === player.id);
+          return { main: cell?.main ?? (hole ? '—' : ''), sub: cell?.sub ?? '' };
+        }),
+        playerY + rowHeight * index,
+        false,
+      ),
+    ),
+  ].join('');
+}
+
 function renderRow(label: string, values: readonly { readonly main: string; readonly sub: string }[], y: number, header: boolean): string {
   const cells = values.map((value, index) => renderCell(value.main, value.sub, horizontalPadding + labelWidth + cellWidth * index, y, header));
-
   return [
-    `<rect x="${horizontalPadding}" y="${y}" width="${labelWidth - 10}" height="${rowHeight - 8}" rx="14" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.18)"/>`,
-    `<text x="${horizontalPadding + 14}" y="${y + 30}" class="label">${escapeXml(label)}</text>`,
+    `<rect x="${horizontalPadding}" y="${y}" width="${labelWidth - 8}" height="${rowHeight - 8}" rx="8" fill="#ffffff" stroke="#d9d2c5" stroke-width="1"/>`,
+    `<text x="${horizontalPadding + 10}" y="${y + 58}" font-size="15" font-weight="700" fill="#17241f">${escapeXml(truncateLabel(label, 5))}</text>`,
     ...cells,
   ].join('');
 }
 
 function renderCell(main: string, sub: string, x: number, y: number, header: boolean): string {
-  const fill = header ? '#ffffff' : 'rgba(255,255,255,0.08)';
-  const mainFill = header ? '#101828' : '#f8fafc';
-  const subFill = header ? '#334155' : '#cbd5e1';
+  if (!main && !sub) {
+    return `<rect x="${x}" y="${y}" width="${cellWidth - 8}" height="${rowHeight - 8}" rx="8" fill="#ffffff" stroke="#efeae1" stroke-width="1"/>`;
+  }
+  const parts = sub.split(' · ').filter(Boolean).map((part) => truncateLabel(part, 6));
+  const mainY = parts.length ? y + 34 : y + 62;
+  const fill = header ? '#f3efe6' : '#ffffff';
+  const stroke = header ? '#1e3d32' : '#d9d2c5';
+  const mainFill = header ? '#f7f4ee' : '#17241f';
+  const textFill = header ? '#1e3d32' : '#17241f';
   return [
-    `<rect x="${x}" y="${y}" width="${cellWidth - 8}" height="${rowHeight - 8}" rx="14" fill="${fill}" stroke="rgba(255,255,255,0.16)"/>`,
-    `<text x="${x + (cellWidth - 8) / 2}" y="${y + (sub ? 24 : 30)}" text-anchor="middle" class="cell-main" fill="${mainFill}">${escapeXml(main)}</text>`,
-    sub ? `<text x="${x + (cellWidth - 8) / 2}" y="${y + 40}" text-anchor="middle" class="cell-sub" fill="${subFill}">${escapeXml(sub)}</text>` : '',
+    `<rect x="${x}" y="${y}" width="${cellWidth - 8}" height="${rowHeight - 8}" rx="8" fill="${header ? '#1e3d32' : fill}" stroke="${stroke}" stroke-width="1"/>`,
+    `<text x="${x + (cellWidth - 8) / 2}" y="${mainY}" text-anchor="middle" font-size="${header ? 18 : 26}" font-weight="700" fill="${header ? mainFill : textFill}">${escapeXml(main)}</text>`,
+    ...parts.map((part, index) => `<text x="${x + (cellWidth - 8) / 2}" y="${y + 58 + index * 20}" text-anchor="middle" font-size="13" font-weight="650" fill="#17241f">${escapeXml(part)}</text>`),
   ].join('');
 }
 
-function renderReviewRows(view: ScorecardRoundView, y: number, width: number): readonly string[] {
-  if (view.reviews.length === 0) {
-    return [];
-  }
-
-  const cardWidth = width - horizontalPadding * 2;
-  return [
-    `<text x="${horizontalPadding}" y="${y}" class="label">라운드 리뷰</text>`,
-    ...view.reviews.map((review, index) => {
-      const rowY = y + 16 + reviewCardHeight * index;
-      const scoreTypes = Object.entries(review.scoreTypeCounts)
-        .filter(([, value]) => value > 0)
-        .map(([key, value]) => `${scoreTypeLabel(key as keyof typeof review.scoreTypeCounts)} ${value}`)
-        .join(' · ') || '기록 전';
-      return [
-        `<rect x="${horizontalPadding}" y="${rowY}" width="${cardWidth}" height="${reviewCardHeight - 12}" rx="18" fill="rgba(255,255,255,0.1)" stroke="rgba(255,255,255,0.16)"/>`,
-        `<text x="${horizontalPadding + 18}" y="${rowY + 30}" class="review-name">${escapeXml(displayPlayerName(view.players[index] ?? { id: review.playerId, name: review.playerName }, index))}</text>`,
-        `<text x="${width - horizontalPadding - 18}" y="${rowY + 34}" text-anchor="end" class="review-score">${escapeXml(review.completedHoles ? relativeScoreLabel(review.totalRelative) : '—')}</text>`,
-        `<text x="${horizontalPadding + 18}" y="${rowY + 56}" class="review-line">${escapeXml(`${review.completedHoles}홀 · 총타 ${review.completedHoles ? `${review.totalStrokes}타` : '—'} · 전/후 ${relativeScoreLabel(review.frontRelative)} / ${relativeScoreLabel(review.backRelative)} · 온 평균 ${review.averageOnGreenShots ?? '—'} · 펏 평균 ${review.averagePutts ?? '—'} · 3펏 ${review.threePuttCount}회`)}</text>`,
-        `<text x="${horizontalPadding + 18}" y="${rowY + 76}" class="small">${escapeXml(scoreTypes)}</text>`,
-      ].join('');
-    }),
-  ];
-}
-
-function renderMemoRows(lines: readonly string[], y: number): readonly string[] {
+function renderWrappedSection(title: string, lines: readonly string[], y: number, width: number): readonly string[] {
   if (lines.length === 0) {
     return [];
   }
-
+  const cardHeight = 24 + lines.length * reviewLineHeight;
   return [
-    `<text x="${horizontalPadding}" y="${y}" class="label">홀 메모</text>`,
-    ...lines.map((line, index) => {
-      const rowY = y + 28 + memoRowHeight * index;
-      return `<text x="${horizontalPadding}" y="${rowY}" class="memo">${escapeXml(line)}</text>`;
-    }),
+    `<text x="${horizontalPadding}" y="${y}" font-size="18" font-weight="700" fill="#1e3d32">${escapeXml(title)}</text>`,
+    `<rect x="${horizontalPadding}" y="${y + 10}" width="${width - horizontalPadding * 2}" height="${cardHeight}" rx="12" fill="#ffffff" stroke="#d9d2c5" stroke-width="1"/>`,
+    ...lines.map((line, index) => `<text x="${horizontalPadding + 16}" y="${y + 36 + reviewLineHeight * index}" font-size="16" font-weight="600" fill="#17241f">${escapeXml(line)}</text>`),
   ];
 }
 
+function reviewTextLines(view: ScorecardRoundView): readonly string[] {
+  return view.reviews.flatMap((review, index) => {
+    const name = displayPlayerName(view.players[index] ?? { id: review.playerId, name: review.playerName }, index);
+    const score = review.completedHoles ? relativeScoreLabel(review.totalRelative) : '—';
+    const strokes = review.completedHoles ? `${review.totalStrokes}타` : '—';
+    const types = visibleScoreTypeCounts(review.scoreTypeCounts).map((entry) => `${entry.label} ${entry.count}`).join(' · ');
+    return [
+      name,
+      `${review.completedHoles}홀 · 총타 ${strokes} · ${score}`,
+      `전반 ${relativeScoreLabel(review.frontRelative)} · 후반 ${relativeScoreLabel(review.backRelative)}`,
+      `온 평균 ${formatStat(review.averageOnGreenShots)} · 펏 평균 ${formatStat(review.averagePutts)}`,
+      `파온율 ${formatPercent(review.girRate)} · 파세이브율 ${formatPercent(review.parSaveRate)}`,
+      `1펏 ${review.onePuttCount}회 · 3펏 ${review.threePuttCount}회`,
+      types || '기록 전',
+    ];
+  });
+}
+
+function penaltyTextLines(view: ScorecardRoundView): readonly string[] {
+  return view.reviews.flatMap((review, index) => review.lostStrokeHoles.map((lost) => {
+    const name = displayPlayerName(view.players[index] ?? { id: review.playerId, name: review.playerName }, index);
+    return `${name} ${lost.holeNumber}H ${lost.label}`;
+  }));
+}
+
 function memoTextLines(view: ScorecardRoundView): readonly string[] {
-  return view.memoHighlights.flatMap((memo) => wrapText(`${memo.holeNumber}H · ${memo.memo}`, memoWrapLength));
+  return view.memoHighlights.flatMap((memo) => wrapText(`${memo.holeNumber}H ${memo.memo}`, 32));
 }
 
 function wrapText(value: string, maxLength: number): readonly string[] {
@@ -204,7 +252,6 @@ function wrapText(value: string, maxLength: number): readonly string[] {
   if (characters.length <= maxLength) {
     return [value];
   }
-
   const lines: string[] = [];
   for (let index = 0; index < characters.length; index += maxLength) {
     lines.push(characters.slice(index, index + maxLength).join(''));
@@ -220,18 +267,25 @@ function scoreSummaryText(view: ScorecardRoundView): string {
   return `${firstReview.completedHoles}홀 ${relativeScoreLabel(firstReview.totalRelative)}`;
 }
 
+function formatStat(value: number | null): string {
+  return value === null ? '—' : `${value}`;
+}
+
+function formatPercent(value: number | null): string {
+  return value === null ? '—' : `${value}%`;
+}
+
+function truncateLabel(value: string, maxLength = 8): string {
+  const characters = Array.from(value);
+  return characters.length > maxLength ? `${characters.slice(0, maxLength - 1).join('')}…` : value;
+}
+
 function formatExportTimestamp(value: string): string {
   const parsed = Date.parse(value);
-
   if (Number.isNaN(parsed)) {
     return value;
   }
-
-  return new Intl.DateTimeFormat('ko-KR', {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-    hour12: false,
-  }).format(parsed);
+  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(parsed);
 }
 
 async function svgToPngBlob(svg: string): Promise<Blob | null> {
@@ -240,19 +294,20 @@ async function svgToPngBlob(svg: string): Promise<Blob | null> {
     return null;
   }
 
+  const pixelSize = scorecardExportPixelSize(size.width, size.height);
   const svgBlob = new Blob([svg], { type: 'image/svg+xml;charset=utf-8' });
   const url = URL.createObjectURL(svgBlob);
   try {
     const image = await loadImage(url);
     const canvas = document.createElement('canvas');
-    canvas.width = size.width;
-    canvas.height = size.height;
+    canvas.width = pixelSize.width;
+    canvas.height = pixelSize.height;
     const context = canvas.getContext('2d');
     if (!context) {
       return null;
     }
-    context.drawImage(image, 0, 0, size.width, size.height);
-    return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, pngMimeType, 0.96));
+    context.drawImage(image, 0, 0, pixelSize.width, pixelSize.height);
+    return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, pngMimeType));
   } finally {
     URL.revokeObjectURL(url);
   }
@@ -295,10 +350,5 @@ function downloadBlob(fileName: string, blob: Blob): void {
 }
 
 function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
 }

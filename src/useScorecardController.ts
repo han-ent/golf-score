@@ -4,8 +4,10 @@ import {
   buildScorecardView,
   holeForNumber,
   maximumScorecardStrokes,
+  quickScoreForPar,
   relativeScoreLabel,
   scoreForPlayer,
+  type QuickScoreKind,
   type ScorecardHoleScoreInput,
   type ScorecardHoleScore,
   type ScorecardRound,
@@ -22,10 +24,13 @@ export function useScorecardController({ round, session }: ScorecardControllerOp
   const [currentHoleDraft, setCurrentHoleDraft] = useState('1');
   const [parDraftsByHole, setParDraftsByHole] = useState<Record<number, string>>({});
   const [memoDraftsByHole, setMemoDraftsByHole] = useState<Record<number, string>>({});
+  const [activePlayerIndexState, setActivePlayerIndex] = useState(0);
 
   const navigation = scorecardNavigationState(currentHoleDraft, round.settings.holeCount);
   const { activeNine, holeNumber, visibleHoleNumbers } = navigation;
   const roundView = buildScorecardView(round);
+  const activePlayerIndex = Math.min(activePlayerIndexState, Math.max(0, round.players.length - 1));
+  const activePlayer = round.players[activePlayerIndex];
 
   function selectHole(targetHoleNumber: number) {
     setCurrentHoleDraft(Math.min(round.settings.holeCount, Math.max(1, targetHoleNumber)).toString());
@@ -66,15 +71,35 @@ export function useScorecardController({ round, session }: ScorecardControllerOp
 
   function updateOnGreenShots(playerId: string, onGreenShots: number) {
     const currentScore = scoreForPlayer(round, holeNumber, playerId);
-    const normalizedOn = clampInteger(onGreenShots, 1, 9);
-    const putts = currentScore?.entryMode === 'on-putt' && currentScore.putts !== undefined ? currentScore.putts : 2;
-    commitOnPuttScore(playerId, normalizedOn, putts);
+    session.updateHoleScore(holeNumber, playerId, scoreAfterOnGreenChoice(onGreenShots, currentScore));
   }
 
   function updatePutts(playerId: string, putts: number) {
     const currentScore = scoreForPlayer(round, holeNumber, playerId);
     const onGreenShots = currentScore?.entryMode === 'on-putt' && currentScore.onGreenShots !== undefined ? currentScore.onGreenShots : 2;
-    commitOnPuttScore(playerId, onGreenShots, clampInteger(putts, 0, 9));
+    session.updateHoleScore(holeNumber, playerId, onPuttScoreInput(onGreenShots, clampInteger(putts, 0, 9), false));
+  }
+
+  function adjustPutts(playerId: string, delta: number) {
+    const currentScore = scoreForPlayer(round, holeNumber, playerId);
+    const basePutts = currentScore?.entryMode === 'on-putt' && currentScore.putts !== undefined ? currentScore.putts : 2;
+    updatePutts(playerId, basePutts + delta);
+  }
+
+  function recordQuickScore(kind: QuickScoreKind) {
+    if (!activePlayer) {
+      return;
+    }
+    const quick = quickScoreForPar(parForHole(holeNumber), kind);
+    session.updateHoleScore(holeNumber, activePlayer.id, onPuttScoreInput(quick.onGreenShots, quick.putts, false));
+    const next = nextEntryTarget({
+      holeNumber,
+      holeCount: round.settings.holeCount,
+      playerIndex: activePlayerIndex,
+      playerCount: round.players.length,
+    });
+    setActivePlayerIndex(next.playerIndex);
+    setCurrentHoleDraft(next.holeNumber.toString());
   }
 
   function updateHoleInOne(playerId: string) {
@@ -108,30 +133,45 @@ export function useScorecardController({ round, session }: ScorecardControllerOp
     return relativeScoreLabel(score.strokes - parForHole(targetHoleNumber));
   }
 
-  function commitOnPuttScore(playerId: string, onGreenShots: number, putts: number) {
-    session.updateHoleScore(holeNumber, playerId, onPuttScoreInput(onGreenShots, putts));
+  function advanceHole() {
+    const nextHole = Math.min(round.settings.holeCount, holeNumber + 1);
+    setActivePlayerIndex(0);
+    setCurrentHoleDraft(nextHole.toString());
+  }
+
+  function previousHole() {
+    setActivePlayerIndex(0);
+    setCurrentHoleDraft(Math.max(1, holeNumber - 1).toString());
   }
 
   function resetScorecardDrafts() {
     setCurrentHoleDraft('1');
+    setActivePlayerIndex(0);
     setParDraftsByHole({});
     setMemoDraftsByHole({});
   }
 
   return {
     activeNine,
+    activePlayer,
+    activePlayerIndex,
+    adjustPutts,
+    advanceHole,
     currentHoleDraft,
     holeNumber,
     memoInputValue,
     parForHole,
     parInputValue,
     relativeScoreForPlayer,
+    previousHole,
+    recordQuickScore,
     resetScorecardDrafts,
     roundView,
     scoreForPlayer: (targetHoleNumber: number, playerId: string): ScorecardHoleScore | undefined => scoreForPlayer(round, targetHoleNumber, playerId),
     scorecardCellLabel,
     scorecardCellSubLabel,
     selectHole,
+    selectPlayer: setActivePlayerIndex,
     updateHoleDraft: (value: string) => setCurrentHoleDraft(value),
     normalizeHoleDraft: () => setCurrentHoleDraft(normalizeSelectedHoleDraft(currentHoleDraft, round.settings.holeCount)),
     updateHoleInOne,
@@ -179,11 +219,40 @@ export function normalizeParDraft(value: string): number | null {
   return parsedValue === null ? null : clampInteger(parsedValue, 3, 5);
 }
 
-export function onPuttScoreInput(onGreenShots: number, putts: number): ScorecardHoleScoreInput {
+export function onPuttScoreInput(onGreenShots: number, putts: number, puttsAssumed = false): ScorecardHoleScoreInput {
   const normalizedOnGreenShots = clampInteger(onGreenShots, 1, 9);
   const normalizedPutts = clampInteger(putts, 0, 9);
   const strokes = clampInteger(normalizedOnGreenShots + normalizedPutts, 1, maximumScorecardStrokes);
-  return { strokes, entryMode: 'on-putt', onGreenShots: normalizedOnGreenShots, putts: normalizedPutts };
+  return { strokes, entryMode: 'on-putt', onGreenShots: normalizedOnGreenShots, putts: normalizedPutts, puttsAssumed };
+}
+
+export function scoreAfterOnGreenChoice(
+  onGreenShots: number,
+  current: Pick<ScorecardHoleScore, 'entryMode' | 'putts' | 'puttsAssumed'> | undefined,
+): ScorecardHoleScoreInput {
+  const userChosePutts = current?.entryMode === 'on-putt' && typeof current.putts === 'number' && current.puttsAssumed !== true;
+  const putts = userChosePutts ? current.putts ?? 2 : 2;
+  return onPuttScoreInput(onGreenShots, putts, !userChosePutts);
+}
+
+export function nextEntryTarget(input: {
+  readonly holeNumber: number;
+  readonly holeCount: number;
+  readonly playerIndex: number;
+  readonly playerCount: number;
+}): { readonly holeNumber: number; readonly playerIndex: number } {
+  const holeCount = clampInteger(input.holeCount, 1, 18);
+  const holeNumber = clampInteger(input.holeNumber, 1, holeCount);
+  const playerCount = clampInteger(input.playerCount, 1, 4);
+  const playerIndex = clampInteger(input.playerIndex, 0, playerCount - 1);
+
+  if (playerIndex + 1 < playerCount) {
+    return { holeNumber, playerIndex: playerIndex + 1 };
+  }
+  if (holeNumber >= holeCount) {
+    return { holeNumber, playerIndex };
+  }
+  return { holeNumber: holeNumber + 1, playerIndex: 0 };
 }
 
 export function holeInOneScoreInput(): ScorecardHoleScoreInput {

@@ -1,37 +1,30 @@
-# DESIGN.md — FunGolf Simple Scorecard
+# DESIGN.md — FunGolf
 
-## Design intent
+FunGolf는 코스에서 한 손으로 쓰는 한국어 스코어카드입니다. 화면을 열면 지금 홀이 먼저 나오고, 세팅과 메모는 필요할 때만 펼칩니다.
 
-FunGolf should feel like a premium Korean mobile utility for a golfer walking the course: calm, fast, legible, and restrained. The visual language may be Apple-inspired in the broad sense of quiet hierarchy, soft depth, generous spacing, and precise typography, but it must not use Apple logos, product imagery, trademark lockups, or affiliation language.
+## 화면
 
-## Core screens
+1. 지금 홀. 파 3/4/5, 파·보기·더블, 온, 펏, OB·해저드, 다음 홀.
+2. 스코어카드. 상대 타수를 크게, 온·펏은 12px 이상으로. 칸은 56px 이상이고 가로는 스크롤됩니다.
+3. 라운드 리뷰. 0인 스코어 종류는 숨기고, 파온율·파세이브율·1펏·3펏·타수를 잃은 홀을 보여 줍니다.
+4. 지난 라운드. 평균 타수와 파온 흐름.
+5. 설정 시트. 이름, 코스, 인원, 새 라운드.
+6. 사진 저장. 흰 바탕, 검은 글자, 전반·후반 두 줄, 2배 크기.
 
-1. **라운드 세팅** — 1-person default, selectable 1–4 players, blank-editable names, round/course labels, and hole count.
-2. **스코어카드** — front/back grid with hole row, par row, and one player row per active player.
-3. **홀 입력** — selected-hole 온/펏 buttons, 홀인원, direct stroke fallback, clear score, and hole memo.
-4. **라운드 리뷰** — total relative score, front/back relative score, score-type counts, on/putt averages, 3-putt count, and memo highlights.
-5. **이미지 저장** — local PNG export with full scorecard, round review, and non-empty memos.
+## 입력
 
-## Interaction principles
+- 파 3은 1/2/3온 + 2펏, 파 4는 2/3/4온 + 2펏, 파 5는 3/4/5온 + 2펏이 한 번의 탭입니다.
+- 온만 누르면 2펏이 기본값입니다. 기본값은 흐리게, 직접 고른 펏은 굵게 표시합니다.
+- 두 명 이상이면 한 선수를 기록한 뒤 다음 선수로, 마지막 선수 다음은 다음 홀입니다.
+- 새 라운드와 저장 기록 지우기는 확인 후 실행합니다.
 
-- **Under 2-minute setup:** default to one blank player and allow every editable field to be fully cleared.
-- **Under 10-second hole entry:** selected-hole controls should be thumb-friendly, large, and visible below the grid.
-- **Single-screen confidence:** score cells show the relative number first, with 온/펏 detail as a small annotation.
-- **Local-only simplicity:** saved data stays on the current device; export is a local file action.
-- **No extra game modes:** do not introduce side games, settlement panels, external APIs, or coaching flows.
+## 보기
 
-## Visual system
+- 글꼴은 Pretendard, Apple SD Gothic Neo, Malgun Gothic, Noto Sans KR입니다.
+- 기본 화면은 밝은 배경에 검은 글자입니다. 햇빛 모드는 흰 바탕과 검은 테두리로 더 또렷하게 바꿉니다.
+- 주요 버튼 높이는 44px 이상입니다.
+- 화면 켜 두기는 Wake Lock을 쓰고, 없으면 기기 잠금을 직접 늘리라는 안내를 보여 줍니다.
 
-- Korean-first font stack: `Pretendard`, `Apple SD Gothic Neo`, `Malgun Gothic`, `Noto Sans KR`, system sans-serif.
-- Mobile-first width, safe-area padding, rounded cards, quiet separators, and high-contrast text.
-- Premium palette: soft neutral base, deep slate surfaces, restrained green/blue accents.
-- Minimum touch target: roughly 44px height for primary controls.
-- Scorecard grid fits each front/back nine-hole half into the available phone width without hiding 5H–9H or 14H–18H.
-- Exported PNG should look screenshot-worthy and readable when saved from iPhone or Samsung browser flows.
+## 쓰지 않는 말
 
-## Copy boundaries
-
-Use score-recording language:
-
-- Prefer: `스코어카드`, `홀 메모`, `온`, `펏`, `라운드 리뷰`, `이미지 저장`, `로컬 저장`.
-- Avoid: money movement language, public sharing, backend room, live sync, external field-data integrations, recommendation flows, distance advice, or coaching claims.
+스코어 기록에 쓰는 말을 유지합니다. 돈, 공개 공유, 서버 방, 추천, 거리 조언, 코칭은 쓰지 않습니다.

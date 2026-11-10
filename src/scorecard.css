@@ -3,156 +3,157 @@
 }
 
 .scorecard-scroll {
-  overflow-x: visible;
-  padding-bottom: 0.25rem;
+  overflow-x: auto;
+  margin: 0 calc(var(--space-1) * -1);
+  padding: 0 var(--space-1) var(--space-2);
+  -webkit-overflow-scrolling: touch;
 }
 
 .scorecard-matrix {
   display: grid;
-  width: 100%;
-  min-width: 0;
-  gap: clamp(0.2rem, 0.8vw, 0.45rem);
+  gap: var(--space-1);
+  width: max-content;
+  min-width: 100%;
 }
 
 .scorecard-row {
   display: grid;
-  grid-template-columns: minmax(4.25rem, 1.05fr) repeat(9, minmax(0, 1fr));
-  gap: clamp(0.2rem, 0.8vw, 0.45rem);
+  grid-template-columns: 72px repeat(9, minmax(56px, 72px));
+  gap: var(--space-1);
   align-items: stretch;
+  width: max-content;
+}
+
+.scorecard-row > * {
   min-width: 0;
 }
 
 .scorecard-row-label,
 .scorecard-cell {
-  min-width: 0;
-  min-height: clamp(2.75rem, 7.4vw, 3.5rem);
-  border-radius: clamp(0.62rem, 2vw, 1rem);
+  height: 72px;
+  min-height: 72px;
+  border-radius: var(--radius-sm);
+  box-sizing: border-box;
+}
+
+.scorecard-cell {
+  min-width: 56px;
 }
 
 .scorecard-row-label {
   display: flex;
   align-items: center;
-  min-width: 0;
-  padding: 0 clamp(0.35rem, 1.4vw, 0.85rem);
-  overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: #f8fafc;
-  color: #475569;
-  font-weight: 900;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.scorecard-header-row .scorecard-row-label,
-.scorecard-par-row .scorecard-row-label {
   justify-content: center;
-  padding: 0;
+  width: 72px;
+  padding: 0 var(--space-1);
+  overflow: hidden;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
   text-align: center;
 }
 
 .player-label {
-  border-left: clamp(0.18rem, 0.8vw, 0.35rem) solid var(--player-tone, #2563eb);
-  color: #0f172a;
+  box-shadow: inset 3px 0 0 var(--player-tone, var(--green));
 }
 
 .scorecard-cell {
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: #ffffff;
-  color: #0f172a;
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  color: #141414;
 }
 
 button.scorecard-cell {
   display: grid;
   place-items: center;
-  gap: 0.1rem;
-  padding: clamp(0.16rem, 0.8vw, 0.45rem);
+  align-content: center;
+  gap: 2px;
+  padding: var(--space-1);
 }
 
-.header-cell {
-  font-size: clamp(0.64rem, 2.35vw, 0.95rem);
-  font-weight: 950;
-}
-
-.input-cell {
-  display: block;
-  padding: clamp(0.12rem, 0.7vw, 0.3rem);
-}
-
-.input-cell input {
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  min-height: clamp(2.25rem, 6.2vw, 2.85rem);
-  border: 0;
-  padding: 0;
-  border-radius: clamp(0.48rem, 1.6vw, 0.8rem);
-  background: #eef2f7;
-  color: #0f172a;
-  text-align: center;
-  font-size: clamp(0.78rem, 2.8vw, 1rem);
-  font-weight: 950;
-}
-
-.score-cell strong {
-  font-size: clamp(0.92rem, 3.2vw, 1.45rem);
+.header-cell,
+.par-cell {
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
 }
 
-.score-cell span {
+.score-cell {
+  grid-template-rows: 24px 28px;
+}
+
+.score-cell strong {
   display: block;
+  height: 24px;
+  color: #141414;
+  font-size: 20px;
+  font-weight: 680;
+  font-variant-numeric: tabular-nums;
+  line-height: 24px;
+}
+
+.score-sub {
+  display: grid;
+  align-content: center;
+  height: 28px;
   max-width: 100%;
   overflow: hidden;
-  color: #64748b;
-  font-size: clamp(0.48rem, 1.65vw, 0.76rem);
-  font-weight: 800;
-  line-height: 1.08;
-  text-align: center;
+  color: #141414;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: 14px;
+}
+
+.score-sub em {
+  display: block;
+  overflow: hidden;
+  font-style: normal;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .scorecard-cell.active {
-  border-color: rgba(37, 99, 235, 0.55);
-  background: #eff6ff;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+  background: var(--green-soft);
+  box-shadow: inset 0 0 0 1.5px var(--green);
+  color: #141414;
 }
 
 .scorecard-header-row .scorecard-row-label,
 .scorecard-header-row .scorecard-cell {
-  background: #0f172a;
-  color: #ffffff;
+  background: var(--green);
+  color: var(--ivory);
+  border-color: var(--green);
 }
 
 .scorecard-header-row .scorecard-cell.active {
-  background: #2563eb;
+  background: var(--ivory);
+  color: var(--green);
+  box-shadow: inset 0 0 0 1.5px var(--brass);
 }
 
-@media (max-width: 520px) {
-  .scorecard-row {
-    grid-template-columns: minmax(2.85rem, 0.9fr) repeat(9, minmax(0, 1fr));
-    gap: 0.14rem;
-  }
+html.sunlight .scorecard-cell,
+html.sunlight .score-cell strong,
+html.sunlight .score-sub {
+  color: #000000;
+  border-color: #000000;
+}
 
-  .scorecard-row-label,
-  .scorecard-cell {
-    min-height: 2.72rem;
-  }
+html.sunlight .scorecard-header-row .scorecard-row-label,
+html.sunlight .scorecard-header-row .scorecard-cell {
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
+}
 
-  .scorecard-row-label {
-    padding: 0 0.24rem;
-    font-size: 0.68rem;
-  }
-
-  .scorecard-header-row .scorecard-row-label,
-  .scorecard-par-row .scorecard-row-label {
-    padding: 0;
-  }
-
-  button.scorecard-cell {
-    padding: 0.12rem 0.05rem;
-  }
-
-  .score-cell span {
-    max-height: 1.12rem;
-  }
+html.sunlight .scorecard-header-row .scorecard-cell.active,
+html.sunlight .scorecard-cell.active {
+  background: #ffffff;
+  color: #000000;
+  box-shadow: inset 0 0 0 2px #000000;
 }
