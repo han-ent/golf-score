@@ -52,9 +52,13 @@ html.sunlight {
   position: absolute;
   width: 1px;
   height: 1px;
+  margin: 0;
+  padding: 0;
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
   white-space: nowrap;
+  border: 0;
 }
 
 body {
@@ -398,6 +402,43 @@ h1, h2, h3, p { margin: 0; }
   border: 1px solid var(--hairline);
   border-radius: var(--radius);
 }
+button.history-round {
+  width: 100%;
+  height: auto;
+  min-height: 48px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 550;
+  text-align: left;
+  white-space: normal;
+}
+.history-when,
+.history-meta,
+.history-hole p {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 550;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.history-viewer-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--space-2);
+  align-items: center;
+  min-width: 0;
+}
+.history-viewer-bar .text-button { width: auto; }
+.history-totals,
+.history-hole {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.history-hole {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--hairline);
+}
 .review-player strong,
 .history-round strong { min-width: 0; }
 button.stat-line {
@@ -427,17 +468,17 @@ button.stat-line {
 .score-readout { display: grid; gap: var(--space-2); }
 .penalty-badges { display: flex; flex-wrap: wrap; gap: var(--space-2); }
 .penalty-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   max-width: 100%;
-  padding: var(--space-1) var(--space-3);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
   border-radius: 999px;
   background: var(--brass);
   color: var(--ivory);
   font-size: 13px;
   font-weight: 700;
   line-height: 24px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 .stat-tip,
 .score-breakdown,
@@ -516,7 +557,12 @@ button.stat-line {
 }
 .primary-button,
 .sheet-actions .primary-button,
-.confirm-actions .primary-button { background: var(--green); border-color: var(--green); color: var(--ivory); }
+.confirm-actions .primary-button,
+.confirm-actions .danger-button,
+.sheet-actions .danger-button { background: var(--green); border-color: var(--green); color: var(--ivory); }
+.confirm-actions .danger-button,
+.sheet-actions .danger-button { background: var(--danger); border-color: var(--danger); color: var(--ivory); }
+.sheet-actions .danger-button { grid-column: 1 / -1; }
 .secondary-button,
 .hole-nav button,
 .sheet-actions button,
@@ -531,11 +577,17 @@ button.stat-line {
 
 .sheet-backdrop {
   position: fixed;
-  inset: 0;
   z-index: 8;
+  top: var(--vv-top, 0px);
+  left: var(--vv-left, 0px);
+  width: var(--vv-width, 100%);
+  height: var(--vv-height, 100dvh);
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  box-sizing: border-box;
+  overflow: hidden;
+  overscroll-behavior: none;
   background: rgba(23, 36, 31, 0.4);
   padding: var(--space-3);
 }
@@ -545,9 +597,24 @@ button.stat-line {
   gap: var(--space-4);
   align-content: start;
   width: min(100%, 36rem);
-  max-height: 92vh;
-  overflow: auto;
+  max-height: calc(var(--vv-height, 100dvh) - var(--space-6));
   padding: var(--space-5);
+}
+.sheet {
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+}
+.sheet-body {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.confirm-dialog {
+  overflow: auto;
+  overscroll-behavior: contain;
 }
 .sheet h2,
 .confirm-dialog h2 { margin: 0; }

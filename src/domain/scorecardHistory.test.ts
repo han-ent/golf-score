@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 
 import { applyHoleScoreMutation, buildScorecardView, createDefaultScorecardRound } from './scorecard';
 import type { StorageLike } from './scorecardStorage';
-import { appendScorecardHistory, compareStats, createFinishedRoundRecord, firstPlayerPeers, loadScorecardHistory, statValueFromHistory, summarizeScorecardHistory } from './scorecardHistory';
+import { appendScorecardHistory, clearScorecardHistory, compareStats, createFinishedRoundRecord, firstPlayerPeers, loadScorecardHistory, removeScorecardHistoryRecord, statValueFromHistory, summarizeScorecardHistory } from './scorecardHistory';
+import { scorecardActiveRoundStorageKey } from './scorecardStorage';
 import { reviewStatsFor } from './reviewStats';
 
 class MemoryStorage implements StorageLike {
@@ -56,5 +57,29 @@ describe('scorecard history', () => {
     const comparisons = compareStats(reviewStatsFor(buildScorecardView(round).reviews[0]!), firstPlayerPeers(loaded));
     expect(comparisons.find((comparison) => comparison.id === 'girRate')).toMatchObject({ current: 100, average: 20, samples: 1 });
     expect(comparisons.find((comparison) => comparison.id === 'scrambling')).toMatchObject({ average: null, samples: 0 });
+    expect(loaded[0]?.card).toBeUndefined();
+  });
+
+  it('keeps a hole-by-hole card on new history and deletes history without the active round', () => {
+    let round = createDefaultScorecardRound({ now: '2026-08-01T00:00:00.000Z' });
+    round = { ...round, courseName: '남코스', players: [{ id: 'player-1', name: '영석' }] };
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 2, putts: 2 });
+    const record = createFinishedRoundRecord(round, '2026-08-01T04:00:00.000Z');
+    const storage = new MemoryStorage();
+    storage.setItem(scorecardActiveRoundStorageKey, 'active-round-must-stay');
+    expect(appendScorecardHistory(storage, record!)).toBe(true);
+    const loaded = loadScorecardHistory(storage);
+    expect(loaded[0]?.card?.courseName).toBe('남코스');
+    expect(loaded[0]?.card?.holes[0]?.scores[0]).toMatchObject({ onGreenShots: 2, putts: 2, strokes: 4 });
+
+    const removed = removeScorecardHistoryRecord(storage, 'missing');
+    expect(removed).toHaveLength(1);
+    expect(removeScorecardHistoryRecord(storage, record!.id)).toEqual([]);
+    expect(storage.getItem(scorecardActiveRoundStorageKey)).toBe('active-round-must-stay');
+
+    expect(appendScorecardHistory(storage, record!)).toBe(true);
+    expect(clearScorecardHistory(storage)).toBe(true);
+    expect(loadScorecardHistory(storage)).toEqual([]);
+    expect(storage.getItem(scorecardActiveRoundStorageKey)).toBe('active-round-must-stay');
   });
 });

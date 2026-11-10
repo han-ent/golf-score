@@ -1,4 +1,4 @@
-import { buildScorecardView, displayPlayerName, type ScorecardRound } from './scorecard';
+import { buildScorecardView, cloneScorecardRound, displayPlayerName, normalizeScorecardRoundPayload, type ScorecardRound } from './scorecard';
 import { formatStatDelta, formatStatValue, reviewStatDefinition, reviewStatsFor, type ReviewStatUnit } from './reviewStats';
 import { type StorageLike } from './scorecardStorage';
 
@@ -22,6 +22,7 @@ export type FinishedRoundRecord = {
   readonly roundName: string;
   readonly courseName: string;
   readonly players: readonly FinishedRoundPlayer[];
+  readonly card?: ScorecardRound;
 };
 
 export type HistorySummary = {
@@ -51,7 +52,16 @@ export function createFinishedRoundRecord(round: ScorecardRound, finishedAt: str
       girRate: review.girRate,
       stats: Object.fromEntries(reviewStatsFor(review).map((stat) => [stat.id, stat.numeric])),
     })),
+    card: cloneScorecardRound(round),
   };
+}
+
+export function formatFinishedRoundWhen(value: string): string {
+  const parsed = Date.parse(value);
+  if (Number.isNaN(parsed)) {
+    return value;
+  }
+  return new Intl.DateTimeFormat('ko-KR', { dateStyle: 'medium', timeStyle: 'short', hour12: false }).format(parsed);
 }
 
 export type StatComparison = {
@@ -167,6 +177,33 @@ export function loadScorecardHistory(storage: StorageLike | undefined): readonly
   }
 }
 
+export function clearScorecardHistory(storage: StorageLike | undefined): boolean {
+  if (!storage) {
+    return false;
+  }
+
+  try {
+    storage.removeItem(scorecardHistoryStorageKey);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function removeScorecardHistoryRecord(storage: StorageLike | undefined, recordId: string): readonly FinishedRoundRecord[] | null {
+  if (!storage) {
+    return null;
+  }
+
+  try {
+    const next = loadScorecardHistory(storage).filter((record) => record.id !== recordId);
+    storage.setItem(scorecardHistoryStorageKey, JSON.stringify({ version: historyVersion, rounds: next }));
+    return next;
+  } catch {
+    return null;
+  }
+}
+
 export function appendScorecardHistory(storage: StorageLike | undefined, record: FinishedRoundRecord): boolean {
   if (!storage) {
     return false;
@@ -210,12 +247,14 @@ function normalizeRecord(value: unknown): FinishedRoundRecord | null {
     return null;
   }
 
+  const card = value.card === undefined || value.card === null ? undefined : normalizeScorecardRoundPayload(value.card) ?? undefined;
   return {
     id: value.id,
     finishedAt: value.finishedAt,
     roundName: typeof value.roundName === 'string' ? value.roundName : '',
     courseName: typeof value.courseName === 'string' ? value.courseName : '',
     players,
+    ...(card ? { card } : {}),
   };
 }
 
