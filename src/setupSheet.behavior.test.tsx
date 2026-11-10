@@ -116,7 +116,10 @@ describe('round setup typing', () => {
     const layout = installKeyboardLayout(sheet);
 
     try {
-      for (const name of ['roundName', 'holeCount', 'name-0']) {
+      await act(async () => {
+        [...document.querySelectorAll('button')].find((button) => button.textContent === '4명')?.click();
+      });
+      for (const name of ['roundName', 'holeCount', 'name-3']) {
         const input = field(name);
         await act(async () => {
           input.focus();
@@ -124,33 +127,49 @@ describe('round setup typing', () => {
         });
         const label = input.closest('label');
         const footer = document.querySelector('.sheet-actions');
-        if (!(label instanceof HTMLElement) || !(footer instanceof HTMLElement)) throw new Error('missing field');
+        const header = document.querySelector('.sheet-header');
+        if (!(label instanceof HTMLElement) || !(footer instanceof HTMLElement) || !(header instanceof HTMLElement)) throw new Error('missing field');
         const fieldBox = label.getBoundingClientRect();
         const footerBox = footer.getBoundingClientRect();
+        const headerBox = header.getBoundingClientRect();
         expect(sheet.classList.contains('keyboard-open')).toBe(true);
         expect(document.querySelector('.sheet-actions .save-state')).toBeNull();
         expect(document.body.textContent).not.toContain('새 라운드');
         expect(document.body.textContent).not.toContain('저장 안 함');
         expect(document.body.textContent).toContain('저장');
+        expect(sheet.style.scrollPaddingTop).toBe(sheet.style.getPropertyValue('--sheet-header'));
         expect(sheet.style.scrollPaddingBottom).toBe(sheet.style.getPropertyValue('--sheet-footer'));
-        expect(sheet.style.scrollPaddingBottom.endsWith('px')).toBe(true);
-        expect(document.querySelector('.sheet-body')?.getAttribute('style')).toContain('padding-bottom');
         expect(fieldBox.height).toBeGreaterThan(0);
         expect(fieldBox.top).toBeGreaterThanOrEqual(0);
         expect(fieldBox.bottom).toBeLessThanOrEqual(viewport.height);
+        expect(fieldBox.top).toBeGreaterThanOrEqual(headerBox.bottom);
         expect(fieldBox.bottom).toBeLessThanOrEqual(footerBox.top);
         expect(fieldBox.left).toBeGreaterThanOrEqual(0);
         expect(fieldBox.right).toBeLessThanOrEqual(390);
         expect(intersects(fieldBox, footerBox)).toBe(false);
+        expect(intersects(fieldBox, headerBox)).toBe(false);
+        expect(sheet.style.scrollPaddingTop).toBe(sheet.style.getPropertyValue('--sheet-header'));
         if (name === 'roundName') expect(label.textContent).toContain('라운드 이름');
       }
       viewport.height = 844;
       await act(async () => {
+        field('name-3').focus();
         viewport.dispatch('resize');
       });
+      const closedLabel = field('name-3').closest('label');
+      const closedFooter = document.querySelector('.sheet-actions');
+      const closedHeader = document.querySelector('.sheet-header');
+      if (!(closedLabel instanceof HTMLElement) || !(closedFooter instanceof HTMLElement) || !(closedHeader instanceof HTMLElement)) throw new Error('missing closed field');
+      const closedField = closedLabel.getBoundingClientRect();
+      const closedFooterBox = closedFooter.getBoundingClientRect();
+      const closedHeaderBox = closedHeader.getBoundingClientRect();
+      expect(closedField.top).toBeGreaterThanOrEqual(closedHeaderBox.bottom);
+      expect(closedField.bottom).toBeLessThanOrEqual(closedFooterBox.top);
+      expect(intersects(closedField, closedFooterBox)).toBe(false);
+      expect(intersects(closedField, closedHeaderBox)).toBe(false);
       expect(sheet.classList.contains('keyboard-open')).toBe(false);
       expect(document.body.textContent).toContain('새 라운드');
-      expect(document.body.textContent).toContain('변경 없음');
+      expect(document.body.textContent).toContain('저장하지 않은 변경이 있습니다');
     } finally {
       layout.restore();
     }
@@ -164,9 +183,11 @@ function intersects(field: DOMRect, footer: DOMRect): boolean {
 
 function installKeyboardLayout(sheet: HTMLElement): { restore: () => void } {
   let scroll = 0;
+  const body = sheet.querySelector('.sheet-body');
+  if (!(body instanceof HTMLElement)) throw new Error('missing body');
   const originalRect = HTMLElement.prototype.getBoundingClientRect;
-  const originalDescriptor = Object.getOwnPropertyDescriptor(sheet, 'scrollTop') ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
-  Object.defineProperty(sheet, 'scrollTop', {
+  const originalDescriptor = Object.getOwnPropertyDescriptor(body, 'scrollTop') ?? Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+  Object.defineProperty(body, 'scrollTop', {
     configurable: true,
     get: () => scroll,
     set: (value: number) => {
@@ -175,12 +196,13 @@ function installKeyboardLayout(sheet: HTMLElement): { restore: () => void } {
   });
   HTMLElement.prototype.getBoundingClientRect = function () {
     if (this === sheet) return rect(0, 8, 390, 400);
+    if (this.classList.contains('sheet-body')) return rect(0, 64, 390, 284);
     if (this.classList.contains('sheet-actions')) return rect(0, 348, 390, 56);
-    if (this.tagName === 'H2') return rect(0, 8, 390, 36);
+    if (this.classList.contains('sheet-header')) return rect(0, 8, 390, 56);
     if (this.tagName === 'LABEL') {
       const input = this.querySelector('input');
       const name = input?.getAttribute('name');
-      const natural = name === 'roundName' ? 300 : name === 'holeCount' ? 460 : name === 'name-0' ? 620 : 180;
+      const natural = name === 'roundName' ? 300 : name === 'holeCount' ? 460 : name === 'name-3' ? 900 : 180;
       return rect(0, natural - scroll, 390, 72);
     }
     return rect(0, 0, 0, 0);
@@ -188,7 +210,7 @@ function installKeyboardLayout(sheet: HTMLElement): { restore: () => void } {
   return {
     restore: () => {
       HTMLElement.prototype.getBoundingClientRect = originalRect;
-      if (originalDescriptor) Object.defineProperty(sheet, 'scrollTop', originalDescriptor);
+      if (originalDescriptor) Object.defineProperty(body, 'scrollTop', originalDescriptor);
     },
   };
 }

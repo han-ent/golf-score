@@ -46,23 +46,30 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
     const onFocusOut = () => {
       window.setTimeout(sync, 0);
     };
+    const sheet = sheetRef.current;
+    const scroller = sheet?.querySelector('.sheet-body');
+    const onSheetScroll = () => {
+      sheet?.querySelector('.sheet-header')?.classList.toggle('scrolled', (scroller?.scrollTop ?? 0) > 0);
+    };
     sync();
     window.visualViewport?.addEventListener('resize', sync);
     window.visualViewport?.addEventListener('scroll', sync);
     document.addEventListener('focusin', sync);
     document.addEventListener('focusout', onFocusOut);
+    scroller?.addEventListener('scroll', onSheetScroll, { passive: true });
     return () => {
       window.visualViewport?.removeEventListener('resize', sync);
       window.visualViewport?.removeEventListener('scroll', sync);
       document.removeEventListener('focusin', sync);
       document.removeEventListener('focusout', onFocusOut);
+      scroller?.removeEventListener('scroll', onSheetScroll);
     };
   }, []);
 
   useLayoutEffect(() => {
     const sheet = sheetRef.current;
     if (!sheet) return;
-    syncSheetFooterHeight(sheet, keyboardOpen);
+    syncSheetFooterHeight(sheet);
     if (!keyboardOpen) return;
     const active = document.activeElement;
     if (active instanceof HTMLElement) placeFieldAboveFooter(active);
@@ -75,7 +82,9 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
   const sheet = (
     <div className="sheet-backdrop">
       <div ref={sheetRef} className={keyboardOpen ? 'sheet setup-sheet keyboard-open' : 'sheet setup-sheet'} role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <h2 id="settings-title">라운드 설정</h2>
+        <div className="sheet-header">
+          <h2 id="settings-title">라운드 설정</h2>
+        </div>
         <div className="sheet-body">
           <SetupFields
             initial={initial}
@@ -127,7 +136,7 @@ const SetupFields = memo(function SetupFields({
   }
 
   return (
-    <form ref={formRef} onSubmit={(event) => event.preventDefault()}>
+    <form className="setup-fields" ref={formRef} onSubmit={(event) => event.preventDefault()}>
       <div className="field-grid">
         <label className="field-card">
           라운드 이름
