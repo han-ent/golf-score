@@ -24,7 +24,14 @@ export type ScorecardHoleScore = {
   readonly entryMode: ScoreEntryMode;
   readonly onGreenShots?: number;
   readonly putts?: number;
+  readonly puttsAssumed?: boolean;
   readonly holeInOne?: boolean;
+};
+
+export type HolePenaltyMark = {
+  readonly playerId: string;
+  readonly ob: boolean;
+  readonly hazard: boolean;
 };
 
 export type ScorecardHole = {
@@ -32,6 +39,7 @@ export type ScorecardHole = {
   readonly par: number;
   readonly memo: string;
   readonly scores: readonly ScorecardHoleScore[];
+  readonly penalties: readonly HolePenaltyMark[];
 };
 
 export type ScorecardRound = {
@@ -72,7 +80,20 @@ export type ScorecardPlayerReview = {
   readonly scoreTypeCounts: ScoreTypeCounts;
   readonly averageOnGreenShots: number | null;
   readonly averagePutts: number | null;
+  readonly onePuttCount: number;
   readonly threePuttCount: number;
+  readonly girHits: number;
+  readonly girOpportunities: number;
+  readonly girRate: number | null;
+  readonly parSaves: number;
+  readonly parSaveOpportunities: number;
+  readonly parSaveRate: number | null;
+  readonly lostStrokeHoles: readonly ScorecardLostStroke[];
+};
+
+export type ScorecardLostStroke = {
+  readonly holeNumber: number;
+  readonly label: string;
 };
 
 export type ScorecardHoleView = {
@@ -133,7 +154,11 @@ export function cloneScorecardRound(round: ScorecardRound): ScorecardRound {
     ...round,
     players: round.players.map((player) => ({ ...player })),
     settings: { ...round.settings },
-    holes: round.holes.map((hole) => ({ ...hole, scores: hole.scores.map((score) => ({ ...score })) })),
+    holes: round.holes.map((hole) => ({
+      ...hole,
+      scores: hole.scores.map((score) => ({ ...score })),
+      penalties: hole.penalties.map((penalty) => ({ ...penalty })),
+    })),
   };
 }
 
@@ -197,6 +222,7 @@ export function applyPlayerCountMutation(round: ScorecardRound, playerCount: num
   const holes = round.holes.map((hole) => ({
     ...hole,
     scores: hole.scores.filter((score) => activePlayerIds.has(score.playerId)),
+    penalties: hole.penalties.filter((penalty) => activePlayerIds.has(penalty.playerId)),
   }));
 
   return stampRound({ ...round, players, holes }, now);
@@ -240,6 +266,36 @@ export function applyHoleMemoMutation(round: ScorecardRound, holeNumber: number,
   return stampRound({ ...round, holes }, now);
 }
 
+export function applyHolePenaltyMutation(
+  round: ScorecardRound,
+  holeNumber: number,
+  playerId: string,
+  kind: 'ob' | 'hazard',
+  now = new Date().toISOString(),
+): ScorecardRound {
+  const targetHoleNumber = clampInteger(holeNumber, 1, round.settings.holeCount);
+  if (!round.players.some((player) => player.id === playerId)) {
+    return round;
+  }
+
+  const holes = ensureHoles(round.holes, round.settings.holeCount, round.players).map((hole) => {
+    if (hole.holeNumber !== targetHoleNumber) {
+      return hole;
+    }
+
+    const current = hole.penalties.find((penalty) => penalty.playerId === playerId) ?? { playerId, ob: false, hazard: false };
+    const next = { ...current, [kind]: !current[kind] };
+    const penalties = hole.penalties.filter((penalty) => penalty.playerId !== playerId);
+    if (!next.ob && !next.hazard) {
+      return { ...hole, penalties };
+    }
+
+    return { ...hole, penalties: [...penalties, next].sort(sortPenalties(round.players)) };
+  });
+
+  return stampRound({ ...round, holes }, now);
+}
+
 export function applyHoleScoreMutation(
   round: ScorecardRound,
   holeNumber: number,
@@ -271,8 +327,26 @@ export function applyHoleScoreMutation(
 
 export type ScorecardHoleScoreInput =
   | { readonly strokes: number; readonly entryMode?: 'manual' }
-  | { readonly strokes: number; readonly entryMode: 'on-putt'; readonly onGreenShots: number; readonly putts: number }
+  | { readonly strokes: number; readonly entryMode: 'on-putt'; readonly onGreenShots: number; readonly putts: number; readonly puttsAssumed?: boolean }
   | { readonly strokes: 1; readonly entryMode: 'hio'; readonly onGreenShots: 1; readonly putts: 0; readonly holeInOne: true };
+
+export type QuickScoreKind = 'par' | 'bogey' | 'double';
+
+export function quickScoreForPar(par: number, kind: QuickScoreKind): { readonly onGreenShots: number; readonly putts: 2 } {
+  const normalizedPar = normalizeHolePar(par);
+  const onGreenShots = kind === 'par' ? normalizedPar - 2 : kind === 'bogey' ? normalizedPar - 1 : normalizedPar;
+  return { onGreenShots, putts: 2 };
+}
+
+export function scorecardPlayerLabel(player: ScorecardPlayer, index: number): string {
+  const name = player.name.trim();
+  return name || `${index + 1}번`;
+}
+
+export function visibleScoreTypeCounts(counts: ScoreTypeCounts): readonly { readonly key: keyof ScoreTypeCounts; readonly label: string; readonly count: number }[] {
+  const order: readonly (keyof ScoreTypeCounts)[] = ['eagleOrBetter', 'birdie', 'par', 'bogey', 'doubleBogey', 'tripleOrWorse'];
+  return order.filter((key) => counts[key] > 0).map((key) => ({ key, label: scoreTypeLabel(key), count: counts[key] }));
+}
 
 export function buildScorecardView(round: ScorecardRound): ScorecardRoundView {
   const normalizedRound = { ...round, holes: ensureHoles(round.holes, round.settings.holeCount, round.players) };
@@ -344,9 +418,20 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
   let onGreenCount = 0;
   let puttTotal = 0;
   let puttCount = 0;
+  let onePuttCount = 0;
   let threePuttCount = 0;
+  let girHits = 0;
+  let girOpportunities = 0;
+  let parSaves = 0;
+  let parSaveOpportunities = 0;
+  const lostStrokeHoles: ScorecardLostStroke[] = [];
 
   for (const hole of round.holes) {
+    const penalty = hole.penalties.find((mark) => mark.playerId === player.id && (mark.ob || mark.hazard));
+    if (penalty) {
+      lostStrokeHoles.push({ holeNumber: hole.holeNumber, label: penaltyLabel(penalty) });
+    }
+
     const score = scoreForPlayer(round, hole.holeNumber, player.id);
     if (!score) {
       continue;
@@ -367,10 +452,22 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
       if (typeof score.onGreenShots === 'number') {
         onGreenTotal += score.onGreenShots;
         onGreenCount += 1;
+        girOpportunities += 1;
+        if (score.onGreenShots <= hole.par - 2) {
+          girHits += 1;
+        } else {
+          parSaveOpportunities += 1;
+          if (relative <= 0) {
+            parSaves += 1;
+          }
+        }
       }
       if (typeof score.putts === 'number') {
         puttTotal += score.putts;
         puttCount += 1;
+        if (score.putts === 1) {
+          onePuttCount += 1;
+        }
         if (score.putts >= 3) {
           threePuttCount += 1;
         }
@@ -389,7 +486,15 @@ function buildPlayerReview(round: ScorecardRound, player: ScorecardPlayer): Scor
     scoreTypeCounts: counts,
     averageOnGreenShots: onGreenCount > 0 ? roundToOneDecimal(onGreenTotal / onGreenCount) : null,
     averagePutts: puttCount > 0 ? roundToOneDecimal(puttTotal / puttCount) : null,
+    onePuttCount,
     threePuttCount,
+    girHits,
+    girOpportunities,
+    girRate: girOpportunities > 0 ? roundToOneDecimal((girHits / girOpportunities) * 100) : null,
+    parSaves,
+    parSaveOpportunities,
+    parSaveRate: parSaveOpportunities > 0 ? roundToOneDecimal((parSaves / parSaveOpportunities) * 100) : null,
+    lostStrokeHoles,
   };
 }
 
@@ -423,7 +528,7 @@ function createDefaultHoles(holeCount: number): readonly ScorecardHole[] {
 }
 
 function createDefaultHole(holeNumber: number): ScorecardHole {
-  return { holeNumber, par: 4, memo: '', scores: [] };
+  return { holeNumber, par: 4, memo: '', scores: [], penalties: [] };
 }
 
 function ensureHoles(holes: readonly ScorecardHole[], holeCount: number, players: readonly ScorecardPlayer[]): readonly ScorecardHole[] {
@@ -440,6 +545,7 @@ function ensureHoles(holes: readonly ScorecardHole[], holeCount: number, players
       par: normalizeHolePar(stored.par),
       memo: stored.memo,
       scores: stored.scores.filter((score) => activePlayerIds.has(score.playerId)).map((score) => normalizeStoredScore(score)),
+      penalties: (stored.penalties ?? []).filter((penalty) => activePlayerIds.has(penalty.playerId)).map((penalty) => ({ ...penalty })),
     };
   });
 }
@@ -455,7 +561,8 @@ function normalizeHoles(values: readonly unknown[], players: readonly ScorecardP
     const par = normalizeHolePar(value.par);
     const memo = typeof value.memo === 'string' ? value.memo : '';
     const scores = Array.isArray(value.scores) ? normalizeScores(value.scores, playerIds) : [];
-    return scores ? { holeNumber, par, memo, scores } : null;
+    const penalties = normalizePenalties(value.penalties, playerIds);
+    return scores && penalties ? { holeNumber, par, memo, scores, penalties } : null;
   });
 
   if (!holes.every((hole): hole is ScorecardHole => hole !== null)) {
@@ -504,7 +611,14 @@ function normalizeStoredScore(value: unknown): ScorecardHoleScore {
   if (entryMode === 'on-putt') {
     const onGreenShots = clampInteger(typeof value.onGreenShots === 'number' ? value.onGreenShots : 1, 1, 9);
     const putts = clampInteger(typeof value.putts === 'number' ? value.putts : Math.max(0, strokes - onGreenShots), 0, 9);
-    return { playerId, strokes: clampInteger(onGreenShots + putts, 1, maximumScorecardStrokes), entryMode: 'on-putt', onGreenShots, putts };
+    return {
+      playerId,
+      strokes: clampInteger(onGreenShots + putts, 1, maximumScorecardStrokes),
+      entryMode: 'on-putt',
+      onGreenShots,
+      putts,
+      puttsAssumed: value.puttsAssumed === true,
+    };
   }
 
   return { playerId, strokes, entryMode: 'manual' };
@@ -518,7 +632,14 @@ function normalizeScoreInput(playerId: string, score: ScorecardHoleScoreInput): 
   if (score.entryMode === 'on-putt') {
     const onGreenShots = clampInteger(score.onGreenShots, 1, 9);
     const putts = clampInteger(score.putts, 0, 9);
-    return { playerId, strokes: clampInteger(onGreenShots + putts, 1, maximumScorecardStrokes), entryMode: 'on-putt', onGreenShots, putts };
+    return {
+      playerId,
+      strokes: clampInteger(onGreenShots + putts, 1, maximumScorecardStrokes),
+      entryMode: 'on-putt',
+      onGreenShots,
+      putts,
+      puttsAssumed: score.puttsAssumed === true,
+    };
   }
 
   return { playerId, strokes: clampInteger(score.strokes, 1, maximumScorecardStrokes), entryMode: 'manual' };
@@ -527,6 +648,35 @@ function normalizeScoreInput(playerId: string, score: ScorecardHoleScoreInput): 
 function sortScores(players: readonly ScorecardPlayer[]) {
   const order = new Map(players.map((player, index) => [player.id, index]));
   return (left: ScorecardHoleScore, right: ScorecardHoleScore) => (order.get(left.playerId) ?? 99) - (order.get(right.playerId) ?? 99);
+}
+
+function sortPenalties(players: readonly ScorecardPlayer[]) {
+  const order = new Map(players.map((player, index) => [player.id, index]));
+  return (left: HolePenaltyMark, right: HolePenaltyMark) => (order.get(left.playerId) ?? 99) - (order.get(right.playerId) ?? 99);
+}
+
+function penaltyLabel(penalty: HolePenaltyMark): string {
+  return [penalty.ob ? 'OB' : '', penalty.hazard ? '해저드' : ''].filter(Boolean).join('·');
+}
+
+function normalizePenalties(value: unknown, playerIds: readonly string[]): readonly HolePenaltyMark[] | null {
+  if (value === undefined || value === null) {
+    return [];
+  }
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const penalties = value.map((entry): HolePenaltyMark | null => {
+    if (!isRecord(entry) || typeof entry.playerId !== 'string' || !playerIds.includes(entry.playerId)) {
+      return null;
+    }
+    const ob = entry.ob === true;
+    const hazard = entry.hazard === true;
+    return ob || hazard ? { playerId: entry.playerId, ob, hazard } : null;
+  }).filter((entry): entry is HolePenaltyMark => entry !== null);
+
+  return new Set(penalties.map((penalty) => penalty.playerId)).size === penalties.length ? penalties : null;
 }
 
 function normalizeHoleCount(value: unknown): number {

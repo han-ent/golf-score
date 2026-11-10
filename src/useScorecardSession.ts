@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react';
 import { availableLocalStorage } from './browserEnvironment';
 import {
   applyHoleMemoMutation,
+  applyHolePenaltyMutation,
   applyHoleScoreMutation,
   applyHoleSetupMutation,
   applyPlayerCountMutation,
@@ -16,6 +17,7 @@ import {
   type ScorecardRound,
   type ScorecardRoundSettings,
 } from './domain/scorecard';
+import { appendScorecardHistory, createFinishedRoundRecord, loadScorecardHistory, type FinishedRoundRecord } from './domain/scorecardHistory';
 import {
   clearScorecardRound,
   createBlankStoredScorecardRound,
@@ -31,6 +33,7 @@ export type ScorecardRoundSessionState = {
   readonly storageStatus: SessionStorageStatus;
   readonly storageMessage: string;
   readonly hasSavedRound: boolean;
+  readonly history: readonly FinishedRoundRecord[];
 };
 
 export type ScorecardRoundSession = ScorecardRoundSessionState & {
@@ -41,9 +44,11 @@ export type ScorecardRoundSession = ScorecardRoundSessionState & {
   readonly updateHoleSetup: (holeNumber: number, patch: { readonly par?: number }) => void;
   readonly updateHoleScore: (holeNumber: number, playerId: string, score: ScorecardHoleScoreInput | null) => void;
   readonly updateHoleMemo: (holeNumber: number, memo: string) => void;
+  readonly updateHolePenalty: (holeNumber: number, playerId: string, kind: 'ob' | 'hazard') => void;
   readonly saveRound: () => boolean;
   readonly resetRound: () => void;
   readonly clearSavedRound: () => boolean;
+  readonly finishRound: () => boolean;
 };
 
 export function createInitialScorecardRoundSessionState(storage: StorageLike | undefined, now = new Date().toISOString()): ScorecardRoundSessionState {
@@ -53,8 +58,9 @@ export function createInitialScorecardRoundSessionState(storage: StorageLike | u
     return {
       round: savedRound,
       storageStatus: 'loaded',
-      storageMessage: '이 기기에 저장된 스코어카드를 불러왔습니다.',
+      storageMessage: '이 기기에 저장됨',
       hasSavedRound: true,
+      history: loadScorecardHistory(storage),
     };
   }
 
@@ -62,8 +68,9 @@ export function createInitialScorecardRoundSessionState(storage: StorageLike | u
   return {
     round,
     storageStatus: storage ? 'default' : 'memory-only',
-    storageMessage: storage ? '새 스코어카드를 시작합니다. 입력 내용은 이 기기에만 저장됩니다.' : '로컬 저장소를 사용할 수 없어 현재 화면에만 보관합니다.',
+    storageMessage: storage ? '이 기기에 저장됨' : '로컬 저장소를 사용할 수 없어 현재 화면에만 보관합니다.',
     hasSavedRound: false,
+    history: loadScorecardHistory(storage),
   };
 }
 
@@ -76,8 +83,9 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     setState({
       round: nextRound,
       storageStatus: saved ? 'saved' : storage ? 'default' : 'memory-only',
-      storageMessage: saved ? '입력 내용을 이 기기에 저장했습니다.' : '현재 화면에는 반영됐지만 자동 저장은 사용할 수 없습니다.',
+      storageMessage: saved ? '이 기기에 저장됨' : '현재 화면에는 반영됐지만 자동 저장은 사용할 수 없습니다.',
       hasSavedRound: saved || state.hasSavedRound,
+      history: state.history,
     });
   }
 
@@ -109,12 +117,16 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     commitRound(applyHoleMemoMutation(state.round, holeNumber, memo));
   }
 
+  function updateHolePenalty(holeNumber: number, playerId: string, kind: 'ob' | 'hazard') {
+    commitRound(applyHolePenaltyMutation(state.round, holeNumber, playerId, kind));
+  }
+
   function saveRound(): boolean {
     const saved = saveScorecardRound(storage, state.round);
     setState((current) => ({
       ...current,
       storageStatus: saved ? 'saved' : current.storageStatus,
-      storageMessage: saved ? '현재 스코어카드를 이 기기에 저장했습니다.' : '로컬 저장소 저장에 실패했습니다.',
+      storageMessage: saved ? '이 기기에 저장됨' : '로컬 저장소 저장에 실패했습니다.',
       hasSavedRound: saved || current.hasSavedRound,
     }));
     return saved;
@@ -126,21 +138,50 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     setState({
       round: nextRound,
       storageStatus: storage ? 'cleared' : 'memory-only',
-      storageMessage: '새 라운드를 시작했습니다. 이름, 점수, 메모를 모두 비웠습니다.',
+      storageMessage: storage ? '이 기기에 저장됨' : '로컬 저장소를 사용할 수 없어 현재 화면에만 보관합니다.',
       hasSavedRound: Boolean(storage),
+      history: currentHistory(storage, state.history),
     });
   }
 
   function clearSavedRound(): boolean {
     const cleared = clearScorecardRound(storage);
     const nextRound = createBlankStoredScorecardRound(new Date().toISOString());
+    if (cleared) {
+      saveScorecardRound(storage, nextRound);
+    }
     setState({
       round: nextRound,
       storageStatus: cleared ? 'cleared' : 'memory-only',
-      storageMessage: cleared ? '저장된 스코어카드를 지우고 빈 라운드로 돌아왔습니다.' : '저장된 스코어카드를 지우지 못했습니다.',
+      storageMessage: cleared ? '이 기기에 저장됨' : '저장된 스코어카드를 지우지 못했습니다.',
       hasSavedRound: false,
+      history: currentHistory(storage, state.history),
     });
     return cleared;
+  }
+
+  function finishRound(): boolean {
+    const record = createFinishedRoundRecord(state.round, new Date().toISOString());
+    if (!record) {
+      return false;
+    }
+
+    const saved = appendScorecardHistory(storage, record);
+    if (!saved && storage) {
+      return false;
+    }
+
+    const nextRound = createBlankStoredScorecardRound(new Date().toISOString());
+    saveScorecardRound(storage, nextRound);
+    const history = saved ? currentHistory(storage, [...state.history, record]) : [...state.history, record];
+    setState({
+      round: nextRound,
+      storageStatus: storage ? 'saved' : 'memory-only',
+      storageMessage: storage ? '이 기기에 저장됨' : '지난 라운드는 이 화면에만 남았습니다.',
+      hasSavedRound: Boolean(storage),
+      history,
+    });
+    return true;
   }
 
   return {
@@ -152,8 +193,14 @@ export function useScorecardSession(inputStorage?: StorageLike): ScorecardRoundS
     updateHoleSetup,
     updateHoleScore,
     updateHoleMemo,
+    updateHolePenalty,
     saveRound,
     resetRound,
     clearSavedRound,
+    finishRound,
   };
+}
+
+function currentHistory(storage: StorageLike | undefined, fallback: readonly FinishedRoundRecord[]): readonly FinishedRoundRecord[] {
+  return storage ? loadScorecardHistory(storage) : fallback;
 }

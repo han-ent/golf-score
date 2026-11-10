@@ -1,11 +1,25 @@
 :root {
-  color: #142033;
-  background: #eef3f7;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Segoe UI", sans-serif;
+  --bg: #f4f2ec;
+  --surface: #ffffff;
+  --text: #141414;
+  --muted: #243041;
+  --line: #141414;
+  --assumed: #4b5563;
+  color: var(--text);
+  background: var(--bg);
+  font-family: "Apple SD Gothic Neo", "Pretendard", "Noto Sans KR", "Malgun Gothic", sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+}
+
+html.sunlight {
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --text: #000000;
+  --muted: #000000;
+  --line: #000000;
+  --assumed: #000000;
 }
 
 * { box-sizing: border-box; }
@@ -23,364 +37,194 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at 18% -8%, rgba(37, 99, 235, 0.18), transparent 22rem),
-    radial-gradient(circle at 96% 8%, rgba(16, 185, 129, 0.16), transparent 20rem),
-    linear-gradient(180deg, #f8fafc 0%, #eef4f8 48%, #e2eaf1 100%);
+  background: var(--bg);
+  color: var(--text);
 }
 
-button, input, select, textarea { font: inherit; }
-button, select { cursor: pointer; }
-button:disabled { cursor: not-allowed; opacity: 0.52; }
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: 0.45; }
 h1, h2, h3, p { margin-top: 0; }
+:focus-visible { outline: 3px solid var(--line); outline-offset: 2px; }
 
 .app-shell {
-  width: min(100%, 74rem);
+  width: min(100%, 52rem);
   margin: 0 auto;
-  padding: 0.9rem 0.9rem max(1.4rem, env(safe-area-inset-bottom));
+  padding: 0.75rem 0.75rem calc(5.6rem + env(safe-area-inset-bottom));
 }
 
-.hero-card,
-.control-panel,
-.scorecard-section,
-.hole-panel,
-.review-card,
-.export-card {
-  margin-bottom: 1rem;
-  border: 1px solid rgba(255, 255, 255, 0.74);
-  border-radius: 2rem;
-  background: rgba(255, 255, 255, 0.76);
-  box-shadow:
-    0 1.4rem 3.8rem rgba(36, 52, 80, 0.12),
-    inset 0 1px 0 rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(1.2rem);
+.app-bar, .hole-entry, .scorecard-section, .review-card, .history-card, .export-card, .sheet, .confirm-dialog {
+  border: 1.5px solid var(--line);
+  border-radius: 1.1rem;
+  background: var(--surface);
 }
 
-.hero-card {
-  position: relative;
-  display: grid;
-  gap: 1.2rem;
-  overflow: hidden;
-  padding: 1.25rem;
-}
-
-.hero-card::before {
-  content: "";
-  position: absolute;
-  inset: auto -4rem -7rem auto;
-  width: 16rem;
-  height: 16rem;
-  border-radius: 999px;
-  background: linear-gradient(135deg, rgba(37, 99, 235, 0.32), rgba(5, 150, 105, 0.3));
-  filter: blur(0.25rem);
-}
-
-.hero-card > *, .control-panel > *, .scorecard-section > *, .hole-panel > *, .review-card > *, .export-card > * { position: relative; }
-
-.top-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 0.55rem;
-}
-
-.hero-copy h1 {
-  max-width: 13ch;
+.app-bar, .hole-entry, .scorecard-section, .review-card, .history-card, .export-card {
   margin-bottom: 0.8rem;
-  color: #07111f;
-  font-size: clamp(2.2rem, 10vw, 4.7rem);
-  line-height: 0.96;
-  letter-spacing: -0.08em;
+  padding: 0.85rem;
 }
 
-.hero-copy p:not(.eyebrow), .section-heading p, .export-card p {
-  color: #475569;
-  line-height: 1.62;
-}
-
-.eyebrow {
-  margin-bottom: 0.45rem;
-  color: #2563eb;
-  font-size: 0.78rem;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.hero-metric {
-  display: grid;
-  gap: 0.25rem;
-  width: min(100%, 22rem);
-  padding: 1rem;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 1.35rem;
-  background: rgba(255, 255, 255, 0.78);
-}
-
-.hero-metric span, .hero-metric small { color: #64748b; }
-.hero-metric strong { color: #0f172a; font-size: 1.5rem; }
-
-.control-panel,
-.scorecard-section,
-.hole-panel,
-.review-card,
-.export-card {
-  padding: 1rem;
-}
-
-.section-heading {
-  margin-bottom: 1rem;
-}
-
-.section-heading h2 {
-  margin-bottom: 0.35rem;
-  color: #0f172a;
-  font-size: clamp(1.35rem, 5vw, 2.05rem);
-  letter-spacing: -0.055em;
-}
-
-.compact-heading {
+.app-bar, .title-row, .quick-row, .choice-row, .putt-line, .penalty-row, .sheet-actions, .export-actions, .confirm-actions, .player-line, .stat-line {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.form-grid {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr));
-}
-
-.field-card,
-.player-name-card,
-.memo-card,
-.manual-score,
-.mini-number-field {
-  display: grid;
   gap: 0.45rem;
-  color: #475569;
-  font-size: 0.88rem;
-  font-weight: 760;
-}
-
-.field-card,
-.player-name-card,
-.memo-card {
-  padding: 0.9rem;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.72);
-}
-
-input, textarea {
-  width: 100%;
-  border: 1px solid rgba(15, 23, 42, 0.1);
-  border-radius: 1rem;
-  background: #ffffff;
-  color: #0f172a;
-  outline: none;
-}
-
-input { min-height: 2.75rem; padding: 0 0.85rem; }
-textarea { min-height: 5.6rem; resize: vertical; padding: 0.8rem 0.9rem; }
-input:focus, textarea:focus { border-color: rgba(37, 99, 235, 0.6); box-shadow: 0 0 0 0.25rem rgba(37, 99, 235, 0.1); }
-
-.segmented-control,
-.scorecard-tabs,
-.button-row,
-.entry-footer,
-.export-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.45rem;
-}
-
-.segment,
-.scorecard-tab,
-.choice-chip,
-.primary-button,
-.secondary-button,
-.ghost-button {
-  min-height: 2.75rem;
-  border: 0;
-  border-radius: 999px;
-  font-weight: 850;
-}
-
-.segment,
-.scorecard-tab,
-.choice-chip,
-.secondary-button,
-.ghost-button {
-  background: #eef2f7;
-  color: #1e293b;
-}
-
-.segment,
-.scorecard-tab,
-.choice-chip { padding: 0 0.9rem; }
-.segment.active, .scorecard-tab.active, .choice-chip.active {
-  background: #0f172a;
-  color: #ffffff;
-}
-
-.primary-button {
-  padding: 0 1.2rem;
-  background: linear-gradient(135deg, #2563eb, #059669);
-  color: #ffffff;
-  box-shadow: 0 0.85rem 2rem rgba(37, 99, 235, 0.23);
-}
-
-.secondary-button,
-.ghost-button { padding: 0 0.95rem; border: 1px solid rgba(15, 23, 42, 0.08); }
-.ghost-button.strong { background: #0f172a; color: #ffffff; }
-.secondary-button.danger { color: #be123c; background: #fff1f2; }
-
-.player-editor {
-  display: grid;
-  gap: 0.7rem;
-  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
-  margin-top: 0.8rem;
-}
-
-.player-name-card {
-  border-left: 0.35rem solid var(--player-tone, #2563eb);
-}
-
-.hole-panel,
-.review-card {
-  background: rgba(248, 250, 252, 0.86);
-}
-
-.mini-number-field {
-  width: 5.8rem;
-}
-
-.entry-list {
-  display: grid;
-  gap: 0.8rem;
-  margin-top: 0.8rem;
-}
-
-.entry-card {
-  display: grid;
-  gap: 0.75rem;
-  padding: 0.9rem;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-left: 0.35rem solid var(--player-tone, #2563eb);
-  border-radius: 1.3rem;
-  background: #ffffff;
-}
-
-.entry-card-title {
-  display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 0.75rem;
-  color: #0f172a;
 }
 
-.entry-card-title > div { display: flex; align-items: center; gap: 0.5rem; }
-.entry-card-title output { font-size: 1.6rem; font-weight: 950; color: var(--player-tone, #2563eb); }
-.player-dot { width: 0.75rem; height: 0.75rem; border-radius: 999px; background: var(--player-tone, #2563eb); }
+.app-bar { flex-wrap: wrap; justify-content: space-between; }
+.title-row, .player-line, .stat-line { justify-content: space-between; }
+.putt-line, .choice-row, .penalty-row, .quick-row { flex-wrap: wrap; }
+.product { margin: 0; font-size: 1.05rem; font-weight: 850; }
+.status-text, .hint, .assumed-note, .sheet p, .history-card p, .review-card p { color: var(--muted); }
+.status-text { margin: 0.15rem 0 0; font-size: 0.92rem; font-weight: 750; white-space: nowrap; }
+.app-bar-actions, .par-choices, .player-switch, .segmented-control { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 
-.button-row { align-items: center; }
-.button-row > span { width: 2.2rem; color: #475569; font-weight: 850; }
-.choice-chip { min-width: 2.75rem; padding: 0; }
-
-.entry-footer { align-items: end; }
-.manual-score { width: 8rem; }
-.manual-score input { min-height: 2.75rem; }
-
-.review-grid {
-  display: grid;
-  gap: 0.8rem;
-  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
-}
-
-.review-player-card,
-.memo-highlights {
-  padding: 0.9rem;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  border-radius: 1.25rem;
-  background: #ffffff;
-}
-
-.review-player-card { border-top: 0.35rem solid var(--player-tone, #2563eb); }
-.review-score { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; margin: 0.65rem 0; }
-.review-score b { color: var(--player-tone, #2563eb); font-size: 2.2rem; }
-.review-player-card dl { display: grid; gap: 0.35rem; margin: 0; }
-.review-player-card dl div { display: flex; justify-content: space-between; gap: 1rem; }
-.review-player-card dt { color: #64748b; }
-.review-player-card dd { margin: 0; color: #0f172a; font-weight: 850; }
-.score-type-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.8rem; }
-.score-type-list span { padding: 0.35rem 0.55rem; border-radius: 999px; background: #f1f5f9; color: #475569; font-size: 0.78rem; font-weight: 800; }
-
-.memo-highlights { margin-top: 0.85rem; }
-.memo-highlights h3 { margin-bottom: 0.5rem; }
-.memo-highlights ul { display: grid; gap: 0.5rem; margin: 0; padding-left: 1.1rem; color: #334155; }
-.memo-highlights p { margin-bottom: 0; color: #64748b; }
-
-.export-card {
-  display: grid;
-  gap: 1rem;
-  background: #0f172a;
-  color: #ffffff;
-}
-.export-card .eyebrow { color: #93c5fd; }
-.export-card h2 { color: #ffffff; }
-.export-card p { color: #cbd5e1; }
-.status-text { margin: 0; font-weight: 850; }
-
-.export-preview {
-  grid-column: 1 / -1;
-  display: grid;
-  gap: 0.75rem;
-  padding: 0.75rem;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  border-radius: 1.25rem;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-.export-preview img {
-  width: 100%;
-  max-height: min(70vh, 44rem);
-  border-radius: 1rem;
-  background: #020617;
-  object-fit: contain;
-}
-
-.export-preview p {
+.hole-entry h1 {
   margin: 0;
-  font-size: 0.92rem;
+  font-size: 2.4rem;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
 }
 
-@media (min-width: 780px) {
-  .hero-card { grid-template-columns: 1fr 21rem; align-items: end; padding: 1.6rem; }
-  .top-actions { grid-column: 1 / -1; }
-  .entry-list { grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr)); }
-  .export-card { grid-template-columns: 1fr auto; align-items: center; }
+.running-total { font-size: 1.35rem; font-weight: 850; }
+.player-line { margin: 0.7rem 0; font-weight: 800; }
+.player-line b { font-size: 1.7rem; }
+
+.par-choices button, .player-switch button, .segment, .quick-row button, .choice-chip, .text-button, .primary-button, .secondary-button, .advance-bar button, .sheet-actions button, .confirm-actions button {
+  min-height: 2.75rem;
+  border: 1.5px solid var(--line);
+  border-radius: 999px;
+  background: #ffffff;
+  font-weight: 800;
 }
 
-@media (max-width: 520px) {
-  .button-row {
-    display: grid;
-    grid-template-columns: 2.2rem repeat(3, minmax(2.75rem, 1fr));
-    align-items: center;
-  }
+.par-choices button, .segment, .player-switch button { padding: 0 0.85rem; }
+.par-choices button[aria-checked="true"], .segment[aria-checked="true"], .player-switch button[aria-checked="true"], .choice-chip.active, .quick-row button[aria-pressed="true"] {
+  background: #141414;
+  color: #ffffff;
+}
 
-  .button-row > span {
-    display: flex;
-    grid-row: 1 / span 2;
-    align-self: start;
-    align-items: center;
-    justify-content: center;
-    width: auto;
-    min-height: 2.75rem;
-    text-align: center;
-  }
+.quick-row { margin-top: 0.2rem; }
+.quick-row button { flex: 1; height: 4rem; border-radius: 1rem; font-size: 1.2rem; }
+.hint, .assumed-note { margin: 0.45rem 0 0.7rem; font-size: 0.92rem; font-weight: 700; }
+.detail-label { margin: 0.2rem 0 0.35rem; font-size: 0.95rem; font-weight: 850; }
 
-  .choice-chip {
-    width: 100%;
-  }
+.choice-row { flex-wrap: wrap; }
+.choice-chip { min-width: 2.75rem; padding: 0 0.7rem; }
+.choice-chip.assumed {
+  background: #ffffff;
+  color: var(--assumed);
+  border-style: dashed;
+  font-weight: 550;
+}
+.putt-value {
+  min-width: 2.5rem;
+  font-size: 1.8rem;
+  font-weight: 850;
+  text-align: center;
+}
+.putt-value.assumed { color: var(--assumed); font-weight: 550; }
+.putt-line button { min-width: 2.75rem; }
+
+.penalty-row { flex-wrap: wrap; margin-top: 0.7rem; }
+.penalty-row button[aria-pressed="true"], .text-button[aria-pressed="true"] { background: #141414; color: #ffffff; }
+.memo-button, .text-button, .secondary-button { padding: 0 0.9rem; }
+.memo-card, .manual-score, .field-card { display: grid; gap: 0.35rem; margin-top: 0.7rem; font-weight: 750; }
+.memo-card textarea, .manual-score input, .field-card input {
+  width: 100%;
+  border: 1.5px solid var(--line);
+  border-radius: 0.8rem;
+  background: #ffffff;
+  min-height: 2.75rem;
+  padding: 0.65rem 0.75rem;
+}
+.danger { color: #9f1239; }
+
+.section-heading h2, .review-card h2, .history-card h2, .export-card h2 { margin: 0 0 0.65rem; font-size: 1.35rem; letter-spacing: -0.04em; }
+.compact-heading { display: flex; align-items: center; justify-content: space-between; gap: 0.6rem; }
+.review-player, .history-round {
+  margin-top: 0.7rem;
+  padding-top: 0.7rem;
+  border-top: 1.5px solid var(--line);
+}
+.review-player dl { margin: 0.2rem 0 0; }
+.stat-line { gap: 1rem; margin: 0.28rem 0; }
+.stat-line dt { color: var(--muted); }
+.stat-line dd { margin: 0; font-weight: 850; }
+.score-type-list, .lost-list { display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0.55rem 0 0; padding: 0; list-style: none; }
+.score-type-list li, .lost-list li { border: 1.5px solid var(--line); border-radius: 999px; padding: 0.25rem 0.55rem; font-size: 0.92rem; font-weight: 800; }
+.trend-track { height: 0.55rem; margin-top: 0.35rem; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; }
+.trend-track span { display: block; height: 100%; background: #141414; }
+
+.export-card p { line-height: 1.5; }
+.export-actions { flex-wrap: wrap; }
+.export-actions .primary-button, .export-actions .secondary-button { flex: 1 1 12rem; }
+.export-preview { display: grid; gap: 0.7rem; margin-top: 0.8rem; }
+.export-preview img { width: 100%; max-height: 70vh; object-fit: contain; background: #ffffff; border: 1.5px solid var(--line); border-radius: 0.8rem; }
+.primary-button { padding: 0 1rem; background: #141414; color: #ffffff; }
+
+.advance-bar {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 5;
+  padding: 0.55rem 0.75rem calc(0.55rem + env(safe-area-inset-bottom));
+  background: var(--bg);
+  border-top: 1.5px solid var(--line);
+}
+.advance-bar button {
+  width: min(100%, 52rem);
+  margin: 0 auto;
+  display: block;
+  height: 3.4rem;
+  border-radius: 1rem;
+  background: #141414;
+  color: #ffffff;
+  font-size: 1.15rem;
+}
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 8;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.45);
+  padding: 0.75rem;
+}
+.sheet, .confirm-dialog { width: min(100%, 36rem); max-height: min(88vh, 44rem); overflow: auto; padding: 1rem; }
+.sheet h2, .confirm-dialog h2 { margin: 0 0 0.75rem; }
+.field-grid { display: grid; gap: 0.7rem; }
+.player-editor { display: grid; gap: 0.55rem; margin-top: 0.7rem; }
+.notice { margin: 0.45rem 0 0; font-weight: 750; }
+
+html.sunlight body { background: #ffffff; }
+html.sunlight .app-bar,
+html.sunlight .hole-entry,
+html.sunlight .scorecard-section,
+html.sunlight .review-card,
+html.sunlight .history-card,
+html.sunlight .export-card { border-width: 3px; }
+html.sunlight .choice-chip.assumed,
+html.sunlight .putt-value.assumed {
+  color: #000000;
+  background: #ffffff;
+  border-style: dashed;
+  font-weight: 550;
+}
+html.sunlight .quick-row button[aria-pressed="true"],
+html.sunlight .choice-chip.active,
+html.sunlight .par-choices button[aria-checked="true"],
+html.sunlight .advance-bar button,
+html.sunlight .primary-button {
+  background: #000000;
+  color: #ffffff;
+}
+
+@media (min-width: 800px) {
+  .review-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8rem; }
+  .review-player { border-top: 0; border-left: 1.5px solid var(--line); padding-left: 0.8rem; }
+  .advance-bar { position: static; border: 0; background: transparent; padding: 0; }
+  .app-shell { padding-bottom: 1.4rem; }
 }

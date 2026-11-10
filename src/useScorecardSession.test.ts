@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { applyHoleScoreMutation, createDefaultScorecardRound } from './domain/scorecard';
+import { scorecardHistoryStorageKey } from './domain/scorecardHistory';
 import { saveScorecardRound, scorecardActiveRoundStorageKey, serializeScorecardRound, type StorageLike } from './domain/scorecardStorage';
 import { createInitialScorecardRoundSessionState } from './useScorecardSession';
 
@@ -48,7 +49,7 @@ describe('scorecard session initialization', () => {
     expect(state.round.roundName).toBe('저장 라운드');
     expect(state.round.courseName).toBe('동코스');
     expect(state.round.players).toHaveLength(1);
-    expect(storage.calls).toEqual([`get:${scorecardActiveRoundStorageKey}`]);
+    expect(storage.calls).toEqual([`get:${scorecardActiveRoundStorageKey}`, `get:${scorecardHistoryStorageKey}`]);
   });
 
   it('starts a blank 1-player round when only stale legacy payloads exist', () => {

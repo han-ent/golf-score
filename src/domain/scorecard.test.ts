@@ -2,12 +2,15 @@ import { describe, expect, it } from 'vitest';
 
 import {
   applyHoleMemoMutation,
+  applyHolePenaltyMutation,
   applyHoleScoreMutation,
   applyPlayerCountMutation,
   buildScorecardView,
   createDefaultScorecardRound,
   displayPlayerName,
   relativeScoreLabel,
+  scorecardPlayerLabel,
+  visibleScoreTypeCounts,
 } from './scorecard';
 
 describe('simple scorecard domain', () => {
@@ -88,5 +91,29 @@ describe('simple scorecard domain', () => {
     const round = createDefaultScorecardRound();
     expect(round.players[0]?.name).toBe('');
     expect(displayPlayerName(round.players[0]!, 0)).toBe('1번 플레이어');
+    expect(scorecardPlayerLabel(round.players[0]!, 0)).toBe('1번');
+  });
+
+  it('counts greens in regulation, par saves, one-putts, and hides zero score categories', () => {
+    let round = createDefaultScorecardRound();
+    round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2, puttsAssumed: false });
+    round = applyHoleScoreMutation(round, 2, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 3, putts: 1, puttsAssumed: false });
+    round = applyHoleScoreMutation(round, 3, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 3, putts: 3, puttsAssumed: false });
+    round = applyHolePenaltyMutation(round, 3, 'player-1', 'ob');
+
+    const review = buildScorecardView(round).reviews[0];
+    expect(review).toMatchObject({
+      girHits: 1,
+      girOpportunities: 3,
+      girRate: 33.3,
+      parSaves: 1,
+      parSaveOpportunities: 2,
+      parSaveRate: 50,
+      onePuttCount: 1,
+      threePuttCount: 1,
+      lostStrokeHoles: [{ holeNumber: 3, label: 'OB' }],
+    });
+    expect(visibleScoreTypeCounts(review!.scoreTypeCounts).map((entry) => entry.key)).toEqual(['par', 'doubleBogey']);
+    expect(round.holes[0]?.scores[0]).toMatchObject({ putts: 2, puttsAssumed: false });
   });
 });

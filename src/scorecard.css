@@ -3,156 +3,110 @@
 }
 
 .scorecard-scroll {
-  overflow-x: visible;
-  padding-bottom: 0.25rem;
+  overflow-x: auto;
+  padding-bottom: 0.35rem;
+  -webkit-overflow-scrolling: touch;
 }
 
 .scorecard-matrix {
   display: grid;
-  width: 100%;
-  min-width: 0;
-  gap: clamp(0.2rem, 0.8vw, 0.45rem);
+  gap: 0.35rem;
+  width: max-content;
+  min-width: 100%;
 }
 
 .scorecard-row {
   display: grid;
-  grid-template-columns: minmax(4.25rem, 1.05fr) repeat(9, minmax(0, 1fr));
-  gap: clamp(0.2rem, 0.8vw, 0.45rem);
+  grid-template-columns: 5.75rem repeat(9, minmax(56px, 72px));
+  gap: 0.35rem;
   align-items: stretch;
-  min-width: 0;
+  width: max-content;
 }
 
 .scorecard-row-label,
 .scorecard-cell {
-  min-width: 0;
-  min-height: clamp(2.75rem, 7.4vw, 3.5rem);
-  border-radius: clamp(0.62rem, 2vw, 1rem);
+  min-width: 56px;
+  min-height: 64px;
+  border-radius: 0.8rem;
 }
 
 .scorecard-row-label {
   display: flex;
   align-items: center;
-  min-width: 0;
-  padding: 0 clamp(0.35rem, 1.4vw, 0.85rem);
+  justify-content: center;
+  min-width: 5.75rem;
+  padding: 0 0.35rem;
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.08);
-  background: #f8fafc;
-  color: #475569;
-  font-weight: 900;
+  border: 1.5px solid #141414;
+  background: #ffffff;
+  color: #141414;
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.scorecard-header-row .scorecard-row-label,
-.scorecard-par-row .scorecard-row-label {
-  justify-content: center;
-  padding: 0;
-  text-align: center;
-}
-
 .player-label {
-  border-left: clamp(0.18rem, 0.8vw, 0.35rem) solid var(--player-tone, #2563eb);
-  color: #0f172a;
+  border-left: 0.35rem solid var(--player-tone, #141414);
 }
 
 .scorecard-cell {
   overflow: hidden;
-  border: 1px solid rgba(15, 23, 42, 0.08);
+  border: 1.5px solid #141414;
   background: #ffffff;
-  color: #0f172a;
+  color: #141414;
 }
 
 button.scorecard-cell {
   display: grid;
   place-items: center;
   gap: 0.1rem;
-  padding: clamp(0.16rem, 0.8vw, 0.45rem);
+  padding: 0.2rem;
 }
 
-.header-cell {
-  font-size: clamp(0.64rem, 2.35vw, 0.95rem);
-  font-weight: 950;
-}
-
-.input-cell {
-  display: block;
-  padding: clamp(0.12rem, 0.7vw, 0.3rem);
-}
-
-.input-cell input {
-  width: 100%;
-  min-width: 0;
-  height: 100%;
-  min-height: clamp(2.25rem, 6.2vw, 2.85rem);
-  border: 0;
-  padding: 0;
-  border-radius: clamp(0.48rem, 1.6vw, 0.8rem);
-  background: #eef2f7;
-  color: #0f172a;
-  text-align: center;
-  font-size: clamp(0.78rem, 2.8vw, 1rem);
-  font-weight: 950;
+.header-cell,
+.par-cell {
+  font-size: 1rem;
+  font-weight: 800;
 }
 
 .score-cell strong {
-  font-size: clamp(0.92rem, 3.2vw, 1.45rem);
+  font-size: 1.35rem;
   line-height: 1;
 }
 
-.score-cell span {
-  display: block;
-  max-width: 100%;
-  overflow: hidden;
-  color: #64748b;
-  font-size: clamp(0.48rem, 1.65vw, 0.76rem);
-  font-weight: 800;
-  line-height: 1.08;
-  text-align: center;
-  text-overflow: ellipsis;
+.score-sub {
+  display: grid;
+  color: #141414;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 750;
+  line-height: 1.15;
+}
+
+.score-sub em {
+  font-style: normal;
 }
 
 .scorecard-cell.active {
-  border-color: rgba(37, 99, 235, 0.55);
-  background: #eff6ff;
-  box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.25);
+  background: #141414;
+  color: #ffffff;
+}
+
+.scorecard-cell.active .score-sub {
+  color: #ffffff;
 }
 
 .scorecard-header-row .scorecard-row-label,
 .scorecard-header-row .scorecard-cell {
-  background: #0f172a;
+  background: #141414;
   color: #ffffff;
 }
 
 .scorecard-header-row .scorecard-cell.active {
-  background: #2563eb;
-}
-
-@media (max-width: 520px) {
-  .scorecard-row {
-    grid-template-columns: minmax(2.85rem, 0.9fr) repeat(9, minmax(0, 1fr));
-    gap: 0.14rem;
-  }
-
-  .scorecard-row-label,
-  .scorecard-cell {
-    min-height: 2.72rem;
-  }
-
-  .scorecard-row-label {
-    padding: 0 0.24rem;
-    font-size: 0.68rem;
-  }
-
-  .scorecard-header-row .scorecard-row-label,
-  .scorecard-par-row .scorecard-row-label {
-    padding: 0;
-  }
-
-  button.scorecard-cell {
-    padding: 0.12rem 0.05rem;
-  }
-
-  .score-cell span {
-    max-height: 1.12rem;
-  }
+  outline: 3px solid #141414;
+  outline-offset: 2px;
+  background: #ffffff;
+  color: #141414;
 }

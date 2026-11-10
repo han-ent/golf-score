@@ -69,6 +69,28 @@ describe('scorecard local storage', () => {
     expect(storage.calls).toEqual([`get:${scorecardActiveRoundStorageKey}`]);
   });
 
+  it('keeps rounds saved before putt-assumption and penalty fields', () => {
+    const legacy = {
+      version: 1,
+      round: {
+        id: 'legacy-round',
+        createdAt: '2026-06-01T00:00:00.000Z',
+        updatedAt: '2026-06-01T00:00:00.000Z',
+        roundName: '예전',
+        courseName: '동코스',
+        players: [{ id: 'player-1', name: '영석' }],
+        settings: { holeCount: 18 },
+        holes: [{ holeNumber: 1, par: 4, memo: '예전 메모', scores: [{ playerId: 'player-1', strokes: 5, entryMode: 'on-putt', onGreenShots: 3, putts: 2 }] }],
+      },
+    };
+
+    const loaded = deserializeScorecardRound(JSON.stringify(legacy));
+    expect(loaded?.roundName).toBe('예전');
+    expect(loaded?.holes[0]).toMatchObject({ memo: '예전 메모', penalties: [] });
+    expect(loaded?.holes[0]?.scores[0]).toMatchObject({ onGreenShots: 3, putts: 2, puttsAssumed: false, strokes: 5 });
+    expect(loaded?.holes).toHaveLength(18);
+  });
+
   it('rejects invalid or mismatched versions', () => {
     expect(deserializeScorecardRound('{broken')).toBeNull();
     expect(deserializeScorecardRound(JSON.stringify({ version: 2, round: createDefaultScorecardRound() }))).toBeNull();

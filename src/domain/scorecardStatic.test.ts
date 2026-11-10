@@ -30,7 +30,9 @@ describe('simple scorecard static guardrails', () => {
   it('SSR renders the Korean scorecard concepts without browser globals', () => {
     const html = renderToString(React.createElement(App));
 
-    expect(html).toContain('오늘 폼 정말 좋으시네요 ^0^');
+    expect(html).toContain('FunGolf');
+    expect(readRepoFile('src/App.tsx')).toContain('이 기기에 저장됨');
+    expect(html).toContain('다음 홀');
     expect(html).toContain('스코어카드');
     expect(html).toContain('홀 메모');
     expect(html).toContain('온');
@@ -43,8 +45,9 @@ describe('simple scorecard static guardrails', () => {
 
   it('index metadata describes the simple scorecard product', () => {
     const indexHtml = readRepoFile('index.html');
-    expect(indexHtml).toContain('골프 스코어카드');
+    expect(indexHtml).toContain('FunGolf');
     expect(indexHtml).toContain('온·펏');
+    expect(indexHtml).toContain('manifest.webmanifest');
     expect(indexHtml).not.toContain('오장');
     expect(indexHtml).not.toContain('정산');
   });
@@ -57,34 +60,27 @@ describe('simple scorecard static guardrails', () => {
     }
   });
 
-  it('keeps each nine-hole scorecard half inside the available width', () => {
+  it('scrolls a few wide scorecard cells and keeps on-putt text readable', () => {
     const scorecardCss = readRepoFile('src/scorecard.css');
 
-    expect(scorecardCss).toContain('repeat(9, minmax(0, 1fr))');
-    expect(scorecardCss).toContain('width: 100%');
-    expect(scorecardCss).not.toContain('min-width: max-content');
+    expect(scorecardCss).toContain('overflow-x: auto');
+    expect(scorecardCss).toContain('minmax(56px, 72px)');
+    expect(scorecardCss).toContain('min-width: 56px');
+    expect(scorecardCss).toContain('font-size: 12px');
+    expect(scorecardCss).toContain('color: #141414');
+    expect(scorecardCss).toContain('width: max-content');
   });
 
-  it('keeps compact mobile scorecard labels centered and par inputs visible', () => {
-    const scorecardCss = readRepoFile('src/scorecard.css');
+  it('keeps the next-hole action and selected player controls explicit', () => {
+    const appSource = readRepoFile('src/App.tsx');
+    const gridSource = readRepoFile('src/ScorecardGrid.tsx');
 
-    expect(scorecardCss).toContain(`.scorecard-header-row .scorecard-row-label,
-.scorecard-par-row .scorecard-row-label`);
-    expect(scorecardCss).toContain('justify-content: center');
-    expect(scorecardCss).toContain('text-align: center');
-    expect(scorecardCss).toContain('min-width: 0');
-    expect(scorecardCss).toContain('padding: 0');
-  });
-
-  it('keeps mobile on-putt choice buttons in two balanced rows of three', () => {
-    const styles = readRepoFile('src/styles.css');
-
-    expect(styles).toContain('grid-template-columns: 2.2rem repeat(3, minmax(2.75rem, 1fr))');
-    expect(styles).toContain('grid-row: 1 / span 2');
-    expect(styles).toContain('align-self: start');
-    expect(styles).toContain('min-height: 2.75rem');
-    expect(styles).toContain('.choice-chip');
-    expect(styles).toContain('width: 100%');
+    expect(appSource).toContain('다음 홀');
+    expect(appSource).toContain('aria-checked');
+    expect(appSource).toContain('role="radio"');
+    expect(gridSource).toContain('aria-selected');
+    expect(gridSource).toContain('role="tab"');
+    expect(appSource).not.toContain('로컬 저장');
   });
 
   it('keeps a visible in-app browser export fallback instead of silent downloads', () => {
@@ -101,5 +97,16 @@ describe('simple scorecard static guardrails', () => {
     const runtime = ['src/domain/scorecardStorage.ts', 'src/useScorecardSession.ts', 'src/App.tsx'].map(readRepoFile).join('\n');
     expect(runtime).toContain('fungolf-scorecard:active-round');
     expect(runtime).not.toContain('golf-bet-ledger');
+  });
+
+  it('caches same-origin static files for offline field use', () => {
+    const worker = readRepoFile('public/sw.js');
+    const manifest = readRepoFile('public/manifest.webmanifest');
+
+    expect(worker).toContain('fungolf-static');
+    expect(worker).toContain('self.location.origin');
+    expect(worker).not.toContain('https://');
+    expect(manifest).toContain('"name": "FunGolf"');
+    expect(manifest).toContain('"start_url": "./"');
   });
 });
