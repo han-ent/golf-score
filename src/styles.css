@@ -695,6 +695,55 @@ button.stat-line {
   overflow: auto;
   overscroll-behavior: contain;
 }
+.sheet.setup-sheet {
+  gap: 0;
+  padding: 0 var(--space-4);
+  overflow: hidden;
+  scroll-padding-top: var(--sheet-header, 0px);
+  scroll-padding-bottom: var(--sheet-footer, 0px);
+}
+.sheet.setup-sheet .sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding-bottom: var(--space-4);
+  scroll-padding-top: var(--space-2);
+  scroll-padding-bottom: var(--space-4);
+}
+.sheet.setup-sheet .sheet-header {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  margin: 0 calc(var(--space-4) * -1);
+  padding: var(--space-4);
+  background: var(--surface);
+}
+.sheet.setup-sheet .sheet-header.scrolled {
+  box-shadow: inset 0 -1px 0 var(--hairline);
+}
+.sheet.setup-sheet .sheet-header h2 { margin: 0; }
+.sheet.setup-sheet .setup-fields,
+.sheet.setup-sheet .field-grid,
+.sheet.setup-sheet .player-editor {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  margin: 0;
+}
+.sheet.setup-sheet .field-card { gap: var(--space-2); }
+.sheet.setup-sheet .sheet-actions {
+  margin: 0 calc(var(--space-4) * -1);
+  padding: var(--space-4);
+  background: var(--surface);
+  box-shadow: none;
+}
+.sheet.setup-sheet.keyboard-open .sheet-actions {
+  padding: var(--space-3) var(--space-4) var(--space-4);
+}
+.sheet.keyboard-open .sheet-actions .primary-button {
+  height: 40px;
+  min-height: 40px;
+}
 .sheet > h2,
 .history-viewer-bar,
 .sheet-actions {

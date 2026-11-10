@@ -1,8 +1,9 @@
-import { memo, useCallback, useEffect, useRef, useState, type ChangeEvent, type FocusEvent, type RefObject } from 'react';
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState, type ChangeEvent, type FocusEvent, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 
 import { scorecardPlayerCountOptions, type ScorecardRound } from './domain/scorecard';
 import { isRoundSetupDraftDirty, resizeSetupNames, setupDropsScoredPlayers, type RoundSetupDraft } from './roundSetup';
+import { placeFieldAboveFooter, syncSheetFooterHeight, viewportIsKeyboardOccluded } from './sheetKeyboard';
 
 type RoundSetupSheetProps = {
   readonly round: ScorecardRound;
@@ -17,9 +18,11 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
   const dirty = isRoundSetupDraftDirty(draft, round);
   const dropsScores = setupDropsScoredPlayers(draft, round);
   const formRef = useRef<HTMLFormElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const playerCountRef = useRef(draft.playerCount);
   const onDraftRef = useRef(onDraft);
   const [initial] = useState(draft);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
   const commit = useCallback((next: RoundSetupDraft) => {
     onDraftRef.current(next);
   }, []);
@@ -28,14 +31,60 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
     onDraftRef.current = onDraft;
   }, [onDraft]);
 
+  useEffect(() => {
+    const sync = () => {
+      const sheet = sheetRef.current;
+      const viewportHeight = window.visualViewport?.height ?? window.innerHeight;
+      const occluded = viewportIsKeyboardOccluded(window.innerHeight, viewportHeight);
+      const active = document.activeElement;
+      const inside = active instanceof Node && Boolean(sheet?.contains(active));
+      setKeyboardOpen(occluded && inside);
+      if (occluded && inside && active instanceof HTMLElement && sheet?.classList.contains('keyboard-open')) {
+        placeFieldAboveFooter(active);
+      }
+    };
+    const onFocusOut = () => {
+      window.setTimeout(sync, 0);
+    };
+    const sheet = sheetRef.current;
+    const scroller = sheet?.querySelector('.sheet-body');
+    const onSheetScroll = () => {
+      sheet?.querySelector('.sheet-header')?.classList.toggle('scrolled', (scroller?.scrollTop ?? 0) > 0);
+    };
+    sync();
+    window.visualViewport?.addEventListener('resize', sync);
+    window.visualViewport?.addEventListener('scroll', sync);
+    document.addEventListener('focusin', sync);
+    document.addEventListener('focusout', onFocusOut);
+    scroller?.addEventListener('scroll', onSheetScroll, { passive: true });
+    return () => {
+      window.visualViewport?.removeEventListener('resize', sync);
+      window.visualViewport?.removeEventListener('scroll', sync);
+      document.removeEventListener('focusin', sync);
+      document.removeEventListener('focusout', onFocusOut);
+      scroller?.removeEventListener('scroll', onSheetScroll);
+    };
+  }, []);
+
+  useLayoutEffect(() => {
+    const sheet = sheetRef.current;
+    if (!sheet) return;
+    syncSheetFooterHeight(sheet);
+    if (!keyboardOpen) return;
+    const active = document.activeElement;
+    if (active instanceof HTMLElement) placeFieldAboveFooter(active);
+  }, [keyboardOpen]);
+
   function readDraft(): RoundSetupDraft {
     return draftFromForm(formRef.current, playerCountRef.current, initial);
   }
 
   const sheet = (
     <div className="sheet-backdrop">
-      <div className="sheet" role="dialog" aria-modal="true" aria-labelledby="settings-title">
-        <h2 id="settings-title">라운드 설정</h2>
+      <div ref={sheetRef} className={keyboardOpen ? 'sheet setup-sheet keyboard-open' : 'sheet setup-sheet'} role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div className="sheet-header">
+          <h2 id="settings-title">라운드 설정</h2>
+        </div>
         <div className="sheet-body">
           <SetupFields
             initial={initial}
@@ -46,12 +95,18 @@ export function RoundSetupSheet({ round, draft, onDraft, onSave, onClose, onNewR
           {dropsScores ? <p className="save-state dirty">인원을 줄이면 빠지는 선수의 점수와 벌타도 지워집니다. 저장해야 반영됩니다.</p> : null}
         </div>
         <div className="sheet-actions">
-          <p className={dirty ? 'save-state dirty' : 'save-state'} role="status">
-            {dirty ? '저장하지 않은 변경이 있습니다. 닫기는 반영하지 않습니다.' : '변경 없음'}
-          </p>
+          {keyboardOpen ? null : (
+            <p className={dirty ? 'save-state dirty' : 'save-state'} role="status">
+              {dirty ? '저장하지 않은 변경이 있습니다. 닫기는 반영하지 않습니다.' : '변경 없음'}
+            </p>
+          )}
           <button className={dirty ? 'primary-button' : 'primary-button is-disabled'} type="button" aria-disabled={!dirty} onClick={() => onSave(readDraft())}>저장</button>
-          <button className="secondary-button" type="button" onClick={onNewRound}>새 라운드</button>
-          <button className="secondary-button" type="button" onClick={() => onClose(readDraft())}>{dirty ? '저장 안 함' : '닫기'}</button>
+          {keyboardOpen ? null : (
+            <>
+              <button className="secondary-button" type="button" onClick={onNewRound}>새 라운드</button>
+              <button className="secondary-button" type="button" onClick={() => onClose(readDraft())}>{dirty ? '저장 안 함' : '닫기'}</button>
+            </>
+          )}
         </div>
       </div>
     </div>
@@ -81,7 +136,7 @@ const SetupFields = memo(function SetupFields({
   }
 
   return (
-    <form ref={formRef} onSubmit={(event) => event.preventDefault()}>
+    <form className="setup-fields" ref={formRef} onSubmit={(event) => event.preventDefault()}>
       <div className="field-grid">
         <label className="field-card">
           라운드 이름
@@ -167,5 +222,5 @@ function commitIfReady(event: ChangeEvent<HTMLInputElement>, composing: RefObjec
 }
 
 function revealField(event: FocusEvent<HTMLInputElement>) {
-  event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  placeFieldAboveFooter(event.currentTarget);
 }

@@ -1,5 +1,7 @@
 import { useEffect } from 'react';
 
+import { placeFieldAboveFooter } from './sheetKeyboard';
+
 export function useViewportSheet(open: boolean) {
   useEffect(() => {
     if (!open || typeof document === 'undefined') {
@@ -64,13 +66,10 @@ export function useViewportSheet(open: boolean) {
 function revealFocusedSheetField() {
   const active = document.activeElement;
   if (!(active instanceof HTMLElement)) return;
-  if (!active.closest('.sheet, .confirm-dialog')) return;
-  const scroller = active.closest('.sheet, .confirm-dialog');
-  if (!(scroller instanceof HTMLElement)) return;
-  const scrollerBox = scroller.getBoundingClientRect();
-  const fieldBox = active.getBoundingClientRect();
-  const hidden = scrollerBox.height === 0 || fieldBox.bottom < scrollerBox.top || fieldBox.top > scrollerBox.bottom;
-  if (hidden) {
-    active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  if (active.closest('.sheet')) {
+    placeFieldAboveFooter(active);
+    return;
   }
+  if (!active.closest('.confirm-dialog')) return;
+  active.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 }
