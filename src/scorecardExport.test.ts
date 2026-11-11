@@ -16,7 +16,10 @@ describe('scorecard PNG export source', () => {
       view: buildScorecardView(round),
     });
 
-    expect(svg).toContain('스코어카드');
+    expect(svg).toContain('>골프 스코어</text>');
+    expect(svg).not.toContain('Enjoy!');
+    expect(svg).not.toContain('FunGolf');
+    expect(svg).not.toContain('스코어카드');
     expect(svg).toContain('라운드 리뷰');
     expect(svg).toContain('총타 4타');
     expect(svg).toContain('홀 메모');
@@ -115,6 +118,8 @@ describe('scorecard PNG export source', () => {
 
   it('creates Korean-safe PNG filenames', () => {
     expect(scorecardExportFileName('남서울 OUT', '2026-06-27T00:00:00.000Z')).toBe('남서울-OUT-2026-06-27.png');
+    expect(scorecardExportFileName('', '2026-06-27T00:00:00.000Z')).toBe('골프-스코어-2026-06-27.png');
+    expect(scorecardExportFileName('   ', '2026-06-27T00:00:00.000Z')).toBe('골프-스코어-2026-06-27.png');
   });
 });
 

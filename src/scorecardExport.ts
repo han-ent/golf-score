@@ -53,7 +53,7 @@ const line = '#d9d2c5';
 export function createScorecardExportSvg(input: ScorecardExportInput): string {
   const width = scorecardExportCanvasWidth;
   const nines = nineGroups(input.view.holes);
-  const title = 'FunGolf 스코어카드';
+  const title = '골프 스코어';
   const subtitle = [input.courseName.trim(), input.roundName.trim(), scoreSummaryText(input.view)].filter(Boolean).join(' · ') || '필드 기록';
   const generatedAt = formatExportTimestamp(input.generatedAt);
   const parts: string[] = [];
@@ -154,10 +154,10 @@ export async function saveScorecardExportPng(fileName: string, svg: string): Pro
 }
 
 export function scorecardExportFileName(courseName: string, generatedAt: string): string {
-  const baseName = (courseName.trim() || 'fungolf-scorecard')
+  const baseName = (courseName.trim() || '골프-스코어')
     .replace(/[^\p{Letter}\p{Number}._-]+/gu, '-')
     .replace(/^-+|-+$/g, '')
-    .slice(0, 48) || 'fungolf-scorecard';
+    .slice(0, 48) || '골프-스코어';
   const dateStamp = generatedAt.slice(0, 10) || 'local';
 
   return `${baseName}-${dateStamp}.png`;

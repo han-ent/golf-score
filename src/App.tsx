@@ -229,7 +229,7 @@ export function App() {
     <main className="app-shell">
       <header className="app-bar">
         <div>
-          <p className="product">FunGolf</p>
+          <p className="product"><span className="product-name">골프 스코어</span><span className="product-enjoy">Enjoy!</span></p>
           <p className="status-text">{session.storageStatus === 'memory-only' ? session.storageMessage : '이 기기에 저장됨'}</p>
         </div>
         <div className="app-bar-actions">
