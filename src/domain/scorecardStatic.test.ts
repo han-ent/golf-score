@@ -30,7 +30,9 @@ describe('simple scorecard static guardrails', () => {
   it('SSR renders the Korean scorecard concepts without browser globals', () => {
     const html = renderToString(React.createElement(App));
 
-    expect(html).toContain('FunGolf');
+    expect(html).toContain('골프 스코어');
+    expect(html).toContain('Enjoy!');
+    expect(html).not.toContain('FunGolf');
     expect(readRepoFile('src/App.tsx')).toContain('이 기기에 저장됨');
     expect(html).toContain('다음 홀');
     expect(html).toContain('스코어카드');
@@ -45,7 +47,8 @@ describe('simple scorecard static guardrails', () => {
 
   it('index metadata describes the simple scorecard product', () => {
     const indexHtml = readRepoFile('index.html');
-    expect(indexHtml).toContain('FunGolf');
+    expect(indexHtml).toContain('<title>골프 스코어</title>');
+    expect(indexHtml).not.toContain('FunGolf');
     expect(indexHtml).toContain('온·펏');
     expect(indexHtml).toContain('manifest.webmanifest');
     expect(indexHtml).not.toContain('오장');
@@ -72,6 +75,19 @@ describe('simple scorecard static guardrails', () => {
     expect(scorecardCss).toContain('min-width: 0');
     expect(readRepoFile('src/styles.css')).toContain('--vv-height');
     expect(readRepoFile('src/styles.css')).toContain('100dvh');
+  });
+
+  it('places a brass Enjoy accent 8px to the right of the header title', () => {
+    const styles = readRepoFile('src/styles.css');
+    const app = readRepoFile('src/App.tsx');
+    const product = styles.match(/\.product \{[^}]+\}/)?.[0] ?? '';
+    const enjoy = styles.match(/\.product-enjoy \{[^}]+\}/)?.[0] ?? '';
+
+    expect(app).toContain('className="product-name">골프 스코어');
+    expect(app).toContain('className="product-enjoy">Enjoy!');
+    expect(product).toContain('gap: var(--space-2)');
+    expect(enjoy).toContain('color: var(--brass)');
+    expect(enjoy).toContain('font-size: 12px');
   });
 
   it('keeps layout spacing on the 4/8/12/16/24/32 scale', () => {
@@ -117,7 +133,9 @@ describe('simple scorecard static guardrails', () => {
     expect(worker).toContain('fungolf-static');
     expect(worker).toContain('self.location.origin');
     expect(worker).not.toContain('https://');
-    expect(manifest).toContain('"name": "FunGolf"');
+    expect(manifest).toContain('"name": "골프 스코어"');
+    expect(manifest).toContain('"short_name": "골프 스코어"');
+    expect(manifest).not.toContain('FunGolf');
     expect(manifest).toContain('"start_url": "./"');
   });
 });

@@ -1,8 +1,8 @@
-# FunGolf
+# 골프 스코어
 
-FunGolf는 필드에서 쓰는 한국어 골프 스코어카드입니다. 계정도 서버도 없고, 점수와 메모는 이 기기에만 남습니다.
+골프 스코어는 필드에서 쓰는 한국어 골프 스코어카드입니다. 계정도 서버도 없고, 점수와 메모는 이 기기에만 남습니다.
 
-라이브 주소는 [https://ys-laube.github.io/goodgolfform/](https://ys-laube.github.io/goodgolfform/) 입니다. `main`에 푸시하면 GitHub Actions가 GitHub Pages로 배포합니다.
+라이브 주소는 [https://han-ent.github.io/golf-score/](https://han-ent.github.io/golf-score/) 입니다. `main`에 푸시하면 GitHub Actions가 GitHub Pages로 배포합니다.
 
 ## 하는 일
 
@@ -35,15 +35,8 @@ npm run test
 npm run build
 ```
 
-## 배포와 저장소 이름
+## 배포
 
 Pages 소스는 GitHub Actions입니다. 빌드의 base는 `./`라서 주소가 저장소 이름에 묶이지 않습니다.
-
-저장소 이름을 `goodgolfform`에서 `fungolf`로 바꾸는 경우:
-
-1. GitHub 저장소 Settings에서 이름을 `fungolf`로 바꿉니다. 이 저장소의 코드는 그 이름으로 다시 배포할 필요가 없습니다.
-2. Actions에서 Deploy to GitHub Pages를 한 번 다시 실행합니다. 새 주소는 `https://ys-laube.github.io/fungolf/` 입니다.
-3. 점수는 `localStorage`에 있고, 키는 출처(`https://ys-laube.github.io`) 기준이라 경로가 바뀌어도 같은 브라우저에 남습니다.
-4. 새 주소를 신호가 있을 때 한 번 열어야 그 경로의 오프라인 캐시가 만들어집니다.
 
 활성 라운드 키는 `fungolf-scorecard:active-round:v1`입니다. 예전 기록은 이 키로 그대로 읽습니다.

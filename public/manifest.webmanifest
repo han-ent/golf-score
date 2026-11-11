@@ -1,6 +1,6 @@
 {
-  "name": "FunGolf",
-  "short_name": "FunGolf",
+  "name": "골프 스코어",
+  "short_name": "골프 스코어",
   "description": "필드에서 쓰는 한국어 골프 스코어카드",
   "start_url": "./",
   "scope": "./",
