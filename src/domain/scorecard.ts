@@ -439,9 +439,10 @@ export function buildScorecardView(round: ScorecardRound): ScorecardRoundView {
     players: normalizedRound.players,
     holes,
     reviews: normalizedRound.players.map((player) => buildPlayerReview(normalizedRound, player)),
-    memoHighlights: normalizedRound.holes
-      .filter((hole) => hole.memo.trim().length > 0)
-      .map((hole) => ({ holeNumber: hole.holeNumber, memo: hole.memo.trim() })),
+    memoHighlights: normalizedRound.holes.flatMap((hole) => {
+      const memo = userTypedHoleMemo(hole.memo);
+      return memo ? [{ holeNumber: hole.holeNumber, memo }] : [];
+    }),
   };
 }
 
@@ -858,8 +859,12 @@ function coercePenalty(mark: { playerId: string; ob: unknown; hazard: unknown })
 
 const penaltyLinePattern = /^(?:(.+?)\s+)?(OB|해저드)\s+(\d+)회\s*$/;
 
+export function userTypedHoleMemo(memo: string): string {
+  return memo.split('\n').map((line) => line.trim()).filter((line) => line && !penaltyLinePattern.test(line)).join('\n');
+}
+
 function memoWithPenaltyCounts(memo: string, players: readonly ScorecardPlayer[], penalties: readonly HolePenaltyMark[]): string {
-  const freeText = memo.split('\n').map((line) => line.trim()).filter((line) => line && !penaltyLinePattern.test(line)).join('\n');
+  const freeText = userTypedHoleMemo(memo);
   const multiple = players.length > 1;
   const managed = players.flatMap((player, index) => {
     const mark = penalties.find((penalty) => penalty.playerId === player.id);

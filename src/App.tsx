@@ -417,12 +417,12 @@ export function App() {
             );
           })}
         </div>
-        <div className="memo-highlights">
-          <h3>메모</h3>
-          {controller.roundView.memoHighlights.length ? (
+        {controller.roundView.memoHighlights.length ? (
+          <div className="memo-highlights">
+            <h3>메모</h3>
             <ul>{controller.roundView.memoHighlights.map((memo) => <li key={memo.holeNumber}><strong>{memo.holeNumber}H</strong> {memo.memo}</li>)}</ul>
-          ) : <p>아직 남긴 홀 메모가 없습니다.</p>}
-        </div>
+          </div>
+        ) : null}
       </section>
 
       <section className="history-card" aria-labelledby="history-title">

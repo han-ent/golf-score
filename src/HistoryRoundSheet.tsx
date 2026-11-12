@@ -3,13 +3,12 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { ScorecardNineGrid } from './ScorecardGrid';
 import { StatList } from './StatList';
-import { buildScorecardView, displayPlayerName, relativeScoreLabel, type ScorecardRound } from './domain/scorecard';
+import { buildScorecardView, displayPlayerName, relativeScoreLabel, userTypedHoleMemo, type ScorecardRound } from './domain/scorecard';
 import { formatFinishedRoundWhen, formatPenaltyHoleSummary, type FinishedRoundRecord } from './domain/scorecardHistory';
 import { reviewStatsFor } from './domain/reviewStats';
 import { createScorecardExportPngBlob, downloadScorecardExportPng, finishedRoundExportSource, shareScorecardExportPng } from './scorecardExport';
 
 const playerTones = ['#1e3d32', '#8d7344', '#3e5c4e', '#6d5a38'] as const;
-const penaltyLinePattern = /^(?:(.+?)\s+)?(OB|해저드)\s+(\d+)회\s*$/;
 
 type HistoryRoundSheetProps = {
   readonly record: FinishedRoundRecord;
@@ -250,7 +249,7 @@ function nineTotal(view: ReturnType<typeof buildScorecardView>, holeNumbers: rea
 
 function freeformMemos(card: ScorecardRound): readonly { readonly holeNumber: number; readonly text: string }[] {
   return card.holes.flatMap((hole) => {
-    const text = hole.memo.split('\n').map((line) => line.trim()).filter((line) => line && !penaltyLinePattern.test(line)).join(' ');
+    const text = userTypedHoleMemo(hole.memo).replace(/\n/g, ' ');
     return text ? [{ holeNumber: hole.holeNumber, text }] : [];
   });
 }
