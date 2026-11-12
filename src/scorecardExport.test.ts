@@ -111,6 +111,8 @@ describe('scorecard PNG export source', () => {
     expect(svg).toContain('>H<');
     expect(svg).toContain('OB 2회');
     expect(svg).toContain('해저드 2회');
+    expect(svg).toContain('타수를 잃은 홀');
+    expect(svg).not.toContain('홀 메모');
     expect(svg).toContain('clip-path=');
     expect(svg).toContain('…');
     expect(svg).not.toContain('온 3 · 펏 2 OB');
@@ -145,6 +147,36 @@ describe('scorecard PNG export source', () => {
   it('falls back to 골프-스코어 when a finished round has no course name', () => {
     const record = finishedRound('', '주말', '2026-09-02T04:00:00.000Z');
     expect(finishedRoundExportSource(record)?.fileName).toBe('골프-스코어-2026-09-02.png');
+  });
+
+  it('puts penalty counts only in the lost-stroke section for active and finished exports', () => {
+    let round = createDefaultScorecardRound({ now: '2026-11-12T06:00:00.000Z' });
+    round = { ...round, courseName: '남서울', players: [{ id: 'player-1', name: 'han' }] };
+    round = applyHoleScoreMutation(round, 7, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 4, putts: 2 });
+    round = applyHolePenaltyMutation(round, 7, 'player-1', 'ob', 1);
+    round = applyHoleScoreMutation(round, 15, 'player-1', { strokes: 5, entryMode: 'on-putt', onGreenShots: 3, putts: 2 });
+    round = applyHolePenaltyMutation(round, 15, 'player-1', 'hazard', 1);
+    round = applyHoleMemoMutation(round, 7, `${round.holes[6]?.memo ?? ''}\n핀이 앞`);
+
+    const view = buildScorecardView(round);
+    const active = createScorecardExportSvg({
+      roundName: '주말',
+      courseName: round.courseName,
+      generatedAt: '2026-11-12T06:00:00.000Z',
+      view,
+    });
+    const finished = finishedRoundExportSource(createFinishedRoundRecord(round, '2026-11-12T06:00:00.000Z')!)?.svg ?? '';
+
+    for (const svg of [active, finished]) {
+      expect(svg).toContain('>타수를 잃은 홀</text>');
+      expect(svg).toContain('>han 7H OB 1회</text>');
+      expect(svg).toContain('>han 15H 해저드 1회</text>');
+      expect(svg).toContain('>홀 메모</text>');
+      expect(svg).toContain('>7H 핀이 앞</text>');
+      expect(svg).not.toContain('>7H OB 1회</text>');
+      expect(svg).not.toContain('>15H 해저드 1회</text>');
+      expect(svg).not.toContain('Enjoy!');
+    }
   });
 
   it('cannot rebuild a scorecard image from a summary-only history record', () => {

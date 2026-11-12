@@ -13,6 +13,7 @@ import {
   displayPlayerName,
   relativeScoreLabel,
   scorecardPlayerLabel,
+  userTypedHoleMemo,
   visibleScoreTypeCounts,
 } from './scorecard';
 import { reviewStatsFor } from './reviewStats';
@@ -89,6 +90,31 @@ describe('simple scorecard domain', () => {
     expect(review?.scoreTypeCounts.birdie).toBe(1);
     expect(review?.scoreTypeCounts.tripleOrWorse).toBe(1);
     expect(buildScorecardView(round).memoHighlights).toEqual([{ holeNumber: 10, memo: '후반 첫 홀 드라이버 우측, 4펏' }]);
+  });
+
+  it('keeps auto penalty lines out of memo highlights and in the lost-stroke list', () => {
+    let round = createDefaultScorecardRound();
+    round = { ...round, players: [{ id: 'player-1', name: 'han' }] };
+    round = applyHoleScoreMutation(round, 7, 'player-1', { strokes: 6, entryMode: 'on-putt', onGreenShots: 4, putts: 2 });
+    round = applyHolePenaltyMutation(round, 7, 'player-1', 'ob', 1);
+    round = applyHoleScoreMutation(round, 15, 'player-1', { strokes: 5, entryMode: 'on-putt', onGreenShots: 3, putts: 2 });
+    round = applyHolePenaltyMutation(round, 15, 'player-1', 'hazard', 1);
+    const penaltyOnly = buildScorecardView(round);
+    expect(penaltyOnly.memoHighlights).toEqual([]);
+    expect(userTypedHoleMemo(round.holes[6]?.memo ?? '')).toBe('');
+    expect(round.holes[6]?.memo).toContain('OB 1회');
+    expect(penaltyOnly.reviews[0]?.lostStrokeHoles).toEqual([
+      { holeNumber: 7, label: 'OB 1회' },
+      { holeNumber: 15, label: '해저드 1회' },
+    ]);
+
+    round = applyHoleMemoMutation(round, 7, `${round.holes[6]?.memo ?? ''}\n핀이 앞`);
+    const mixed = buildScorecardView(round);
+    expect(mixed.memoHighlights).toEqual([{ holeNumber: 7, memo: '핀이 앞' }]);
+    expect(mixed.reviews[0]?.lostStrokeHoles).toEqual([
+      { holeNumber: 7, label: 'OB 1회' },
+      { holeNumber: 15, label: '해저드 1회' },
+    ]);
   });
 
   it('uses display labels without mutating blank stored names', () => {
