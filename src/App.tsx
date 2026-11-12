@@ -477,6 +477,7 @@ export function App() {
 
       {viewedHistory ? (
         <HistoryRoundSheet
+          key={viewedHistory.id}
           record={viewedHistory}
           onClose={() => setViewedHistoryId(null)}
           onDelete={() => {

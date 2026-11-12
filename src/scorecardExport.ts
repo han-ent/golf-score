@@ -1,4 +1,4 @@
-import { displayPlayerName, relativeScoreLabel, visibleScoreTypeCounts, type ScorecardHoleView, type ScorecardPlayer, type ScorecardRoundView } from './domain/scorecard';
+import { buildScorecardView, displayPlayerName, relativeScoreLabel, visibleScoreTypeCounts, type ScorecardHoleView, type ScorecardPlayer, type ScorecardRound, type ScorecardRoundView } from './domain/scorecard';
 
 export type ScorecardExportInput = {
   readonly roundName: string;
@@ -161,6 +161,29 @@ export function scorecardExportFileName(courseName: string, generatedAt: string)
   const dateStamp = generatedAt.slice(0, 10) || 'local';
 
   return `${baseName}-${dateStamp}.png`;
+}
+
+export type FinishedRoundExportRecord = {
+  readonly finishedAt: string;
+  readonly roundName: string;
+  readonly courseName: string;
+  readonly card?: ScorecardRound;
+};
+
+export function finishedRoundExportSource(record: FinishedRoundExportRecord): { readonly fileName: string; readonly svg: string } | null {
+  if (!record.card) {
+    return null;
+  }
+
+  return {
+    fileName: scorecardExportFileName(record.courseName, record.finishedAt),
+    svg: createScorecardExportSvg({
+      roundName: record.roundName,
+      courseName: record.courseName,
+      generatedAt: record.finishedAt,
+      view: buildScorecardView(record.card),
+    }),
+  };
 }
 
 function nineBlockHeight(playerCount: number): number {

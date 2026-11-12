@@ -1,11 +1,12 @@
 import { createPortal } from 'react-dom';
-import type { CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 
 import { ScorecardNineGrid } from './ScorecardGrid';
 import { StatList } from './StatList';
 import { buildScorecardView, displayPlayerName, relativeScoreLabel, type ScorecardRound } from './domain/scorecard';
 import { formatFinishedRoundWhen, formatPenaltyHoleSummary, type FinishedRoundRecord } from './domain/scorecardHistory';
 import { reviewStatsFor } from './domain/reviewStats';
+import { createScorecardExportPngBlob, downloadScorecardExportPng, finishedRoundExportSource, shareScorecardExportPng } from './scorecardExport';
 
 const playerTones = ['#1e3d32', '#8d7344', '#3e5c4e', '#6d5a38'] as const;
 const penaltyLinePattern = /^(?:(.+?)\s+)?(OB|해저드)\s+(\d+)회\s*$/;
@@ -16,8 +17,68 @@ type HistoryRoundSheetProps = {
   readonly onDelete: () => void;
 };
 
+type ExportPreview = {
+  readonly source: string;
+  readonly fileName: string;
+  readonly blob: Blob;
+};
+
 export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundSheetProps) {
+  const [exporting, setExporting] = useState(false);
+  const [exportStatus, setExportStatus] = useState<string | null>(null);
+  const [exportPreview, setExportPreview] = useState<ExportPreview | null>(null);
+  const exportResultRef = useRef<HTMLDivElement>(null);
   const title = record.courseName.trim() || record.roundName.trim() || '지난 라운드';
+  const canExport = record.card !== undefined;
+
+  useEffect(() => {
+    if (!exportStatus && !exportPreview) {
+      return;
+    }
+    exportResultRef.current?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  }, [exportStatus, exportPreview]);
+
+  async function handleExport() {
+    const prepared = finishedRoundExportSource(record);
+    if (!prepared || exporting) {
+      return;
+    }
+    setExportPreview(null);
+    setExporting(true);
+    setExportStatus('스코어카드 사진을 만드는 중입니다.');
+    const blob = await createScorecardExportPngBlob(prepared.svg);
+    setExporting(false);
+    if (!blob) {
+      setExportStatus('이 브라우저에서는 스코어카드 사진을 만들 수 없습니다.');
+      return;
+    }
+    const shareResult = await shareScorecardExportPng(prepared.fileName, blob);
+    if (shareResult.ok) {
+      setExportStatus('내보내기 메뉴를 열었습니다. 카카오톡 나에게 보내기 등 원하는 앱을 선택해 주세요.');
+      return;
+    }
+    if (shareResult.reason === 'share-cancelled') {
+      setExportStatus('내보내기를 취소했습니다.');
+      return;
+    }
+    try {
+      const source = await blobToDataUrl(blob);
+      setExportPreview({ source, fileName: prepared.fileName, blob });
+      setExportStatus('이 브라우저에서는 내보내기 메뉴가 제한되어 아래 미리보기를 만들었습니다.');
+    } catch {
+      downloadScorecardExportPng(prepared.fileName, blob);
+      setExportStatus('파일 다운로드를 요청했습니다. 인앱 브라우저에서는 저장 위치가 표시되지 않을 수 있습니다.');
+    }
+  }
+
+  function downloadExportPreview() {
+    if (!exportPreview) {
+      return;
+    }
+    downloadScorecardExportPng(exportPreview.fileName, exportPreview.blob);
+    setExportStatus('파일 다운로드를 요청했습니다. 카카오톡 인앱 브라우저에서는 아래 이미지를 길게 눌러 저장하는 방법이 더 안정적입니다.');
+  }
+
   const card = record.card;
   const view = card ? buildScorecardView(card) : null;
   const frontHoles = view ? view.holes.filter((hole) => hole.holeNumber <= 9).map((hole) => hole.holeNumber) : [];
@@ -98,7 +159,7 @@ export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundShe
                 </div>
               ) : null}
             </div>
-          ) : <p className="history-meta">이 기록은 합계만 남아 있습니다. 홀별 온·퍼트는 이후에 마친 라운드부터 볼 수 있습니다.</p>}
+          ) : <p className="history-meta">이 기록은 합계만 남아 있습니다. 홀별 파·타수·퍼트가 없어 스코어카드 사진은 만들 수 없습니다. 이후에 마친 라운드부터 볼 수 있고 내보낼 수 있습니다.</p>}
           {view ? (
             <div>
               <h3>라운드 리뷰</h3>
@@ -118,8 +179,26 @@ export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundShe
               ))}
             </div>
           ) : null}
+          {exportStatus || exportPreview ? (
+            <div className="history-export-result" ref={exportResultRef}>
+              {exportStatus ? <p className="status-text">{exportStatus}</p> : null}
+              {exportPreview ? (
+                <div className="export-preview" aria-label="스코어카드 이미지 미리보기">
+                  <img src={exportPreview.source} alt="내보낼 스코어카드 미리보기" />
+                  <p>카카오톡 인앱 브라우저에서 다운로드 파일이 안 보이면, 이미지를 길게 눌러 저장/공유하세요. 계속 안 되면 우측 상단 메뉴에서 Chrome 또는 Safari로 열어 다시 내보내면 안정적입니다.</p>
+                  <div className="export-actions">
+                    <button className="secondary-button" type="button" onClick={downloadExportPreview}>파일 다운로드</button>
+                    <button className="secondary-button" type="button" onClick={() => setExportPreview(null)}>미리보기 닫기</button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
         <div className="sheet-actions">
+          {canExport ? (
+            <button className="primary-button" type="button" disabled={exporting} onClick={handleExport}>스코어카드 내보내기</button>
+          ) : null}
           <button className="danger-button" type="button" onClick={onDelete}>이 기록 삭제</button>
         </div>
       </div>
@@ -127,6 +206,18 @@ export function HistoryRoundSheet({ record, onClose, onDelete }: HistoryRoundShe
   );
 
   return typeof document === 'undefined' ? sheet : createPortal(sheet, document.body);
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  if (typeof FileReader === 'undefined') {
+    return Promise.reject(new Error('file reader unavailable'));
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => (typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('invalid file reader result')));
+    reader.onerror = () => reject(reader.error ?? new Error('file reader failed'));
+    reader.readAsDataURL(blob);
+  });
 }
 
 function playerStyle(index: number): CSSProperties {

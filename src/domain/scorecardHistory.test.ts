@@ -70,7 +70,14 @@ describe('scorecard history', () => {
     expect(appendScorecardHistory(storage, record!)).toBe(true);
     const loaded = loadScorecardHistory(storage);
     expect(loaded[0]?.card?.courseName).toBe('남코스');
+    expect(loaded[0]?.card?.players[0]?.name).toBe('영석');
+    expect(loaded[0]?.card?.createdAt).toBe('2026-08-01T00:00:00.000Z');
+    expect(loaded[0]?.finishedAt).toBe('2026-08-01T04:00:00.000Z');
+    expect(loaded[0]?.card?.holes[0]?.par).toBe(4);
     expect(loaded[0]?.card?.holes[0]?.scores[0]).toMatchObject({ onGreenShots: 2, putts: 2, strokes: 4 });
+    const stored = JSON.parse(storage.getItem('fungolf-scorecard:history:v1') ?? '{}') as { version?: number; rounds?: { card?: { holes?: { par?: number }[] } }[] };
+    expect(stored.version).toBe(1);
+    expect(stored.rounds?.[0]?.card?.holes?.[0]?.par).toBe(4);
 
     const removed = removeScorecardHistoryRecord(storage, 'missing');
     expect(removed).toHaveLength(1);

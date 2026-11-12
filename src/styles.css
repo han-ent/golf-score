@@ -493,6 +493,24 @@ button.history-round.selecting {
   -webkit-user-select: none;
   -webkit-touch-callout: none;
 }
+.history-export-result {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+  max-width: 100%;
+  scroll-margin-bottom: calc(var(--space-6) * 5);
+}
+.history-export-result .export-preview {
+  min-width: 0;
+  max-width: 100%;
+}
+.history-export-result .export-preview img {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  height: auto;
+}
 .history-scorecard {
   display: grid;
   gap: var(--space-4);
@@ -709,6 +727,11 @@ button.stat-line {
   flex-direction: column;
   overflow: auto;
   overscroll-behavior: contain;
+}
+.sheet.history-sheet {
+  max-width: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 .sheet.setup-sheet {
   gap: 0;

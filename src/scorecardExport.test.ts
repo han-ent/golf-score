@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 
 import { applyHoleMemoMutation, applyHolePenaltyMutation, applyHoleScoreMutation, buildScorecardView, createDefaultScorecardRound } from './domain/scorecard';
-import { createScorecardExportSvg, estimateExportTextWidth, exportTextBoxHeight, scorecardExportCanvasWidth, scorecardExportFileName, scorecardExportPixelRatio, scorecardExportPixelSize } from './scorecardExport';
+import { createFinishedRoundRecord, type FinishedRoundRecord } from './domain/scorecardHistory';
+import { createScorecardExportSvg, estimateExportTextWidth, exportTextBoxHeight, finishedRoundExportSource, scorecardExportCanvasWidth, scorecardExportFileName, scorecardExportPixelRatio, scorecardExportPixelSize } from './scorecardExport';
 
 describe('scorecard PNG export source', () => {
   it('exports full scorecard, round review, relative cells, on/putt annotations, and non-empty memos', () => {
@@ -121,7 +122,50 @@ describe('scorecard PNG export source', () => {
     expect(scorecardExportFileName('', '2026-06-27T00:00:00.000Z')).toBe('골프-스코어-2026-06-27.png');
     expect(scorecardExportFileName('   ', '2026-06-27T00:00:00.000Z')).toBe('골프-스코어-2026-06-27.png');
   });
+
+  it('exports a finished round with the active renderer, the course filename, and that round date', () => {
+    const record = finishedRound('남서울', '주말 라운드', '2026-09-01T04:00:00.000Z');
+    const prepared = finishedRoundExportSource(record);
+    const direct = createScorecardExportSvg({
+      roundName: record.roundName,
+      courseName: record.courseName,
+      generatedAt: record.finishedAt,
+      view: buildScorecardView(record.card!),
+    });
+
+    expect(prepared?.svg).toBe(direct);
+    expect(prepared?.svg).toContain('>골프 스코어</text>');
+    expect(prepared?.svg).not.toContain('Enjoy!');
+    expect(prepared?.fileName).toBe('남서울-2026-09-01.png');
+    expect(record.card?.players[0]?.name).toBe('영석');
+    expect(record.card?.holes[0]?.par).toBe(4);
+    expect(record.card?.holes[0]?.scores[0]).toMatchObject({ strokes: 4, putts: 2 });
+  });
+
+  it('falls back to 골프-스코어 when a finished round has no course name', () => {
+    const record = finishedRound('', '주말', '2026-09-02T04:00:00.000Z');
+    expect(finishedRoundExportSource(record)?.fileName).toBe('골프-스코어-2026-09-02.png');
+  });
+
+  it('cannot rebuild a scorecard image from a summary-only history record', () => {
+    const summary: FinishedRoundRecord = {
+      id: 'old-round',
+      finishedAt: '2026-05-01T00:00:00.000Z',
+      roundName: '',
+      courseName: '동코스',
+      players: [{ playerId: 'player-1', playerName: '영석', totalStrokes: 90, totalRelative: 18, completedHoles: 18, girRate: 20 }],
+    };
+    expect(summary.card).toBeUndefined();
+    expect(finishedRoundExportSource(summary)).toBeNull();
+  });
 });
+
+function finishedRound(courseName: string, roundName: string, finishedAt: string) {
+  let round = createDefaultScorecardRound({ now: '2026-09-01T00:00:00.000Z' });
+  round = { ...round, courseName, roundName, players: [{ id: 'player-1', name: '영석' }] };
+  round = applyHoleScoreMutation(round, 1, 'player-1', { strokes: 4, entryMode: 'on-putt', onGreenShots: 2, putts: 2 });
+  return createFinishedRoundRecord(round, finishedAt)!;
+}
 
 function svgHeight(svg: string): number {
   return Number(svg.match(/<svg[^>]*\sheight="(\d+)"/)?.[1]);
